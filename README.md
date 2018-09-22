@@ -80,6 +80,12 @@ Offline/Disconnected Support
 
 If you answered **yes** to any of those, you can deploy the ConfigASDK in an offline/disconnected mode. To do so, you should **[read the offline/disconnected documentation.](</deployment/offline/README.md>)**
 
+Custom Region and External Domain Suffix
+------------
+* Support for customising Region and ExternalDomainSuffix aded by Rik Hepworth
+* $regionName and $externalDomainSuffix mirror equivalent parameters in DeploySingleNode.ps1 in the ASDK clouddeployment\setup folder
+**If you haven't hacked your ASDK deployment, DO NOT USE THESE!**
+
 Step by Step Guidance (for internet-connected ASDK)
 ------------
 
