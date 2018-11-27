@@ -22,7 +22,15 @@ param (
     [String] $databaseName,
 
     [Parameter(Mandatory = $true)]
-    [String] $tableName
+    [String] $tableName,
+
+    # RegionName for if you need to override the default 'local'
+    [Parameter(Mandatory = $false)]
+    [string] $regionName = 'local',
+    
+    # External Domain Suffix for if you need to override the default 'azurestack.external'
+    [Parameter(Mandatory = $false)]
+    [string] $externalDomainSuffix = 'azurestack.external'
 )
 
 $Global:VerbosePreference = "Continue"
@@ -81,7 +89,7 @@ if (($registerASDK -eq $true) -and ($deploymentMode -ne "Offline")) {
                     }
                 }
             }
-            $ArmEndpoint = "https://adminmanagement.local.azurestack.external"
+            $ArmEndpoint = "https://adminmanagement.$regionName.$externalDomainSuffix"
             Add-AzureRmEnvironment -Name "AzureStackAdmin" -ArmEndpoint "$ArmEndpoint" -ErrorAction Stop
             Add-AzureRmAccount -EnvironmentName "AzureStackAdmin" -TenantId $tenantID -Credential $asdkCreds -ErrorAction Stop | Out-Null
             $activationName = "default"

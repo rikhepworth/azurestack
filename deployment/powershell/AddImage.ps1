@@ -54,7 +54,15 @@ param (
     [String] $databaseName,
 
     [Parameter(Mandatory = $true)]
-    [String] $tableName
+    [String] $tableName,
+
+    # RegionName for if you need to override the default 'local'
+    [Parameter(Mandatory = $false)]
+    [string] $regionName = 'local',
+    
+    # External Domain Suffix for if you need to override the default 'azurestack.external'
+    [Parameter(Mandatory = $false)]
+    [string] $externalDomainSuffix = 'azurestack.external'
 )
 
 $Global:VerbosePreference = "Continue"
@@ -203,7 +211,7 @@ if (($progressCheck -eq "Incomplete") -or ($progressCheck -eq "Failed")) {
         }
 
         # Log into Azure Stack to check for existing images and push new ones if required ###
-        $ArmEndpoint = "https://adminmanagement.local.azurestack.external"
+        $ArmEndpoint = "https://adminmanagement.$regionName.$externalDomainSuffix"
         Add-AzureRMEnvironment -Name "AzureStackAdmin" -ArmEndpoint "$ArmEndpoint" -ErrorAction Stop
         Add-AzureRmAccount -EnvironmentName "AzureStackAdmin" -TenantId $TenantID -Credential $asdkCreds -ErrorAction Stop | Out-Null
         if (($registerASDK -eq $true) -and ($deploymentMode -eq "Online")) {

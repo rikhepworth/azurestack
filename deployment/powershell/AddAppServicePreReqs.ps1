@@ -44,7 +44,15 @@ param (
     [String] $databaseName,
 
     [Parameter(Mandatory = $true)]
-    [String] $tableName
+    [String] $tableName,
+
+    # RegionName for if you need to override the default 'local'
+    [Parameter(Mandatory = $false)]
+    [string] $regionName = 'local',
+    
+    # External Domain Suffix for if you need to override the default 'azurestack.external'
+    [Parameter(Mandatory = $false)]
+    [string] $externalDomainSuffix = 'azurestack.external'
 )
 
 $Global:VerbosePreference = "Continue"
@@ -102,7 +110,7 @@ elseif (($skipAppService -eq $false) -and ($progressCheck -ne "Complete")) {
                     throw "The DownloadAppService stage of the process has failed. This should fully complete before the App Service PreReqs can be started. Check the DownloadAppService log, ensure that step is completed first, and rerun."
                 }
             }
-            $ArmEndpoint = "https://adminmanagement.local.azurestack.external"
+            $ArmEndpoint = "https://adminmanagement.$regionName.$externalDomainSuffix"
             Add-AzureRMEnvironment -Name "AzureStackAdmin" -ArmEndpoint "$ArmEndpoint" -ErrorAction Stop
             $ADauth = (Get-AzureRmEnvironment -Name "AzureStackAdmin").ActiveDirectoryAuthority.TrimEnd('/')
 
@@ -112,7 +120,7 @@ elseif (($skipAppService -eq $false) -and ($progressCheck -ne "Complete")) {
             Set-Location "$AppServicePath"
             
             if (!$([System.IO.File]::Exists("$AppServicePath\CertsCreated.txt"))) {
-                .\Create-AppServiceCerts.ps1 -PfxPassword $secureVMpwd -DomainName "local.azurestack.external"
+                .\Create-AppServiceCerts.ps1 -PfxPassword $secureVMpwd -DomainName "$regionName.$externalDomainSuffix"
                 .\Get-AzureStackRootCert.ps1 -PrivilegedEndpoint $ERCSip -CloudAdminCredential $cloudAdminCreds
                 New-Item -Path "$AppServicePath\CertsCreated.txt" -ItemType file -Force
             }
@@ -129,8 +137,8 @@ elseif (($skipAppService -eq $false) -and ($progressCheck -ne "Complete")) {
                     $tenantId = (Invoke-RestMethod "$($ADauth)/$($azureDirectoryTenantName)/.well-known/openid-configuration").issuer.TrimEnd('/').Split('/')[-1]
                     Add-AzureRmAccount -EnvironmentName "AzureCloud" -TenantId $tenantId -Credential $asdkCreds -ErrorAction Stop
                     Set-Location "$AppServicePath"
-                    $appID = . .\Create-AADIdentityApp.ps1 -DirectoryTenantName "$azureDirectoryTenantName" -AdminArmEndpoint "adminmanagement.local.azurestack.external" -TenantArmEndpoint "management.local.azurestack.external" `
-                        -CertificateFilePath "$AppServicePath\sso.appservice.local.azurestack.external.pfx" -CertificatePassword $secureVMpwd -AzureStackAdminCredential $asdkCreds
+                    $appID = . .\Create-AADIdentityApp.ps1 -DirectoryTenantName "$azureDirectoryTenantName" -AdminArmEndpoint "adminmanagement.$regionName.$externalDomainSuffix" -TenantArmEndpoint "management.$regionName.$externalDomainSuffix" `
+                        -CertificateFilePath "$AppServicePath\sso.appservice.$regionName.$externalDomainSuffix.pfx" -CertificatePassword $secureVMpwd -AzureStackAdminCredential $asdkCreds
                     $appIdPath = "$downloadPath\ApplicationIDBackup.txt"
                     $identityApplicationID = $applicationId
                     New-Item $appIdPath -ItemType file -Force
@@ -139,12 +147,12 @@ elseif (($skipAppService -eq $false) -and ($progressCheck -ne "Complete")) {
                     Start-Sleep -Seconds 20
                 }
                 elseif ($authenticationType.ToString() -like "ADFS") {
-                    $ArmEndpoint = "https://adminmanagement.local.azurestack.external"
+                    $ArmEndpoint = "https://adminmanagement.$regionName.$externalDomainSuffix"
                     Add-AzureRMEnvironment -Name "AzureStackAdmin" -ArmEndpoint "$ArmEndpoint" -ErrorAction Stop
                     Add-AzureRmAccount -EnvironmentName "AzureStackAdmin" -TenantId $TenantID -Credential $asdkCreds -ErrorAction Stop | Out-Null
                     Set-Location "$AppServicePath"
-                    $appID = .\Create-ADFSIdentityApp.ps1 -AdminArmEndpoint "adminmanagement.local.azurestack.external" -PrivilegedEndpoint $ERCSip `
-                        -CertificateFilePath "$AppServicePath\sso.appservice.local.azurestack.external.pfx" -CertificatePassword $secureVMpwd -CloudAdminCredential $asdkCreds
+                    $appID = .\Create-ADFSIdentityApp.ps1 -AdminArmEndpoint "adminmanagement.$regionName.$externalDomainSuffix" -PrivilegedEndpoint $ERCSip `
+                        -CertificateFilePath "$AppServicePath\sso.appservice.$regionName.$externalDomainSuffix.pfx" -CertificatePassword $secureVMpwd -CloudAdminCredential $asdkCreds
                     $appIdPath = "$downloadPath\ApplicationIDBackup.txt"
                     $identityApplicationID = $appID
                     New-Item $appIdPath -ItemType file -Force

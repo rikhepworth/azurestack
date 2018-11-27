@@ -50,7 +50,15 @@ param (
     [String] $databaseName,
 
     [Parameter(Mandatory = $true)]
-    [String] $tableName
+    [String] $tableName,
+
+    # RegionName for if you need to override the default 'local'
+    [Parameter(Mandatory = $false)]
+    [string] $regionName = 'local',
+    
+    # External Domain Suffix for if you need to override the default 'azurestack.external'
+    [Parameter(Mandatory = $false)]
+    [string] $externalDomainSuffix = 'azurestack.external'
 )
 
 $Global:VerbosePreference = "Continue"
@@ -201,7 +209,7 @@ elseif (($skipRP -eq $false) -and ($progressCheck -ne "Complete")) {
                 }
             }
             ### Login to Azure Stack ###
-            $ArmEndpoint = "https://adminmanagement.local.azurestack.external"
+            $ArmEndpoint = "https://adminmanagement.$regionName.$externalDomainSuffix"
             Add-AzureRMEnvironment -Name "AzureStackAdmin" -ArmEndpoint "$ArmEndpoint" -ErrorAction Stop
             Add-AzureRmAccount -EnvironmentName "AzureStackAdmin" -TenantId $tenantID -Credential $asdkCreds -ErrorAction Stop | Out-Null
 
