@@ -177,6 +177,10 @@ param (
     [Parameter(Mandatory = $false)]
     [String] $branch,
 
+	# Github Account to override Matt's repo for download
+	[Parameter(Mandatory = $false)]
+    [String] $gitHubAccount = 'rikhepworth',
+
     # RegionName for if you need to override the default 'Local'
     [parameter(Mandatory = $false)]
     [string]$regionName = 'local',
@@ -605,7 +609,7 @@ if ($deploymentMode -eq "Online") {
         if (!$branch) {
             $branch = "master"
         }
-        $urlToTest = "https://raw.githubusercontent.com/mattmcspirit/azurestack/$branch/README.md"
+        $urlToTest = "https://raw.githubusercontent.com/$gitHubAccount/azurestack/$branch/README.md"
         [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
         $statusCode = Invoke-WebRequest "$urlToTest" -UseBasicParsing -ErrorAction SilentlyContinue | ForEach-Object {$_.StatusCode} -ErrorAction SilentlyContinue
         if ($statusCode -eq 200) {
@@ -1236,7 +1240,7 @@ if (($progressCheck -eq "Incomplete") -or ($progressCheck -eq "Failed")) {
         if ($deploymentMode -eq "Online") {
             # If this is an online deployment, pull down the PowerShell scripts from GitHub
             foreach ($script in $scriptArray) {
-                $scriptBaseURI = "https://raw.githubusercontent.com/mattmcspirit/azurestack/$branch/deployment/powershell"
+                $scriptBaseURI = "https://raw.githubusercontent.com/$gitHubAccount/azurestack/$branch/deployment/powershell"
                 $scriptDownloadPath = "$scriptPath\$script"
                 DownloadWithRetry -downloadURI "$scriptBaseURI/$script" -downloadLocation $scriptDownloadPath -retries 10
             }
@@ -2320,7 +2324,7 @@ elseif (!$skipCustomizeHost -and ($progressCheck -ne "Complete")) {
                     $env:Path = [System.Environment]::GetEnvironmentVariable("Path", "Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path", "User") 
                     # Set up the VM alias Endpoint for Azure CLI & Python
                     if ($deploymentMode -eq "Online") {
-                        $vmAliasEndpoint = "https://raw.githubusercontent.com/mattmcspirit/azurestack/$branch/deployment/packages/Aliases/aliases.json"
+                        $vmAliasEndpoint = "https://raw.githubusercontent.com/$gitHubAccount/azurestack/$branch/deployment/packages/Aliases/aliases.json"
                     }
                     elseif (($deploymentMode -eq "PartialOnline") -or ($deploymentMode -eq "Offline")) {
                         $item = Get-ChildItem -Path "$ASDKpath\images" -Recurse -Include ("aliases.json") -ErrorAction Stop
