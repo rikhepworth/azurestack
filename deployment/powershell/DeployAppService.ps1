@@ -196,6 +196,8 @@ elseif (($skipAppService -eq $false) -and ($progressCheck -ne "Complete")) {
             elseif ($authenticationType.ToString() -like "ADFS") {
                 $JsonConfig = $JsonConfig.Replace("<<AzureDirectoryTenantName>>", "adfs")
             }
+			$JsonConfig = $JsonConfig.Replace("<<RegionName>>", $regionName)
+			$JsonConfig = $JsonConfig.Replace("<<ExternalDomainSuffix>>", $externalDomainSuffix)
             $JsonConfig = $JsonConfig.Replace("<<FileServerDNSLabel>>", $fileServerFqdn)
             $JsonConfig = $JsonConfig.Replace("<<Password>>", $VMpwd)
             $CertPathDoubleSlash = $AppServicePath.Replace("\", "\\")
