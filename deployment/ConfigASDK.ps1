@@ -1729,7 +1729,7 @@ $AddUbuntuImage = {
             -azureRegSubId $Using:azureRegSubId -azureRegTenantID $Using:azureRegTenantID -tenantID $Using:TenantID -azureRegCreds $Using:azureRegCreds `
             -asdkCreds $Using:asdkCreds -ScriptLocation $Using:ScriptLocation -ISOpath $Using:ISOpath -image "UbuntuServer" -branch $Using:branch -runMode $Using:runMode `
             -sqlServerInstance $Using:sqlServerInstance -databaseName $Using:databaseName -tableName $Using:tableName `
-            -regionName $regionName -externalDomainSuffix $externalDomainSuffix
+            -regionName $Using:regionName -externalDomainSuffix $Using:externalDomainSuffix
     } -Verbose -ErrorAction Stop
 }
 JobLauncher -jobName $jobName -jobToExecute $AddUbuntuImage -Verbose
@@ -1741,7 +1741,7 @@ $DownloadWindowsUpdates = {
         Set-Location $Using:ScriptLocation; .\Scripts\DownloadWinUpdates.ps1 -ISOpath $Using:ISOpath -ASDKpath $Using:ASDKpath `
             -azsLocation $Using:azsLocation -deploymentMode $Using:deploymentMode -tenantID $Using:TenantID -asdkCreds $Using:asdkCreds `
             -sqlServerInstance $Using:sqlServerInstance -databaseName $Using:databaseName -tableName $Using:tableName -ScriptLocation $Using:ScriptLocation `
-            -regionName $regionName -externalDomainSuffix $externalDomainSuffix
+            -regionName $Using:regionName -externalDomainSuffix $Using:externalDomainSuffix
     } -Verbose -ErrorAction Stop
 }
 JobLauncher -jobName $jobName -jobToExecute $DownloadWindowsUpdates -Verbose
@@ -1755,7 +1755,7 @@ $AddServerCoreImage = {
             -deploymentMode $Using:deploymentMode -modulePath $Using:modulePath -azureRegSubId $Using:azureRegSubId -azureRegTenantID $Using:azureRegTenantID `
             -tenantID $Using:TenantID -azureRegCreds $Using:azureRegCreds -asdkCreds $Using:asdkCreds -ScriptLocation $Using:ScriptLocation -ISOpath $Using:ISOpath `
             -image "ServerCore" -branch $Using:branch -sqlServerInstance $Using:sqlServerInstance -databaseName $Using:databaseName -tableName $Using:tableName -runMode $Using:runMode `
-            -regionName $regionName -externalDomainSuffix $externalDomainSuffix
+            -regionName $Using:regionName -externalDomainSuffix $Using:externalDomainSuffix
     } -Verbose -ErrorAction Stop
 }
 JobLauncher -jobName $jobName -jobToExecute $AddServerCoreImage -Verbose
@@ -1770,7 +1770,7 @@ $AddServerFullImage = {
             -azureRegSubId $Using:azureRegSubId -azureRegTenantID $Using:azureRegTenantID -tenantID $Using:TenantID -azureRegCreds $Using:azureRegCreds `
             -asdkCreds $Using:asdkCreds -ScriptLocation $Using:ScriptLocation -ISOpath $Using:ISOpath -image "ServerFull" -branch $Using:branch `
             -sqlServerInstance $Using:sqlServerInstance -databaseName $Using:databaseName -tableName $Using:tableName -runMode $Using:runMode `
-            -regionName $regionName -externalDomainSuffix $externalDomainSuffix
+            -regionName $Using:regionName -externalDomainSuffix $Using:externalDomainSuffix
     } -Verbose -ErrorAction Stop
 }
 JobLauncher -jobName $jobName -jobToExecute $AddServerFullImage -Verbose
@@ -1811,7 +1811,7 @@ $AddVMExtensions = {
         Set-Location $Using:ScriptLocation; .\Scripts\AddVMExtensions.ps1 -deploymentMode $Using:deploymentMode -tenantID $Using:TenantID -asdkCreds $Using:asdkCreds `
             -ScriptLocation $Using:ScriptLocation -registerASDK $Using:registerASDK -sqlServerInstance $Using:sqlServerInstance -databaseName $Using:databaseName `
             -tableName $Using:tableName `
-            -regionName $regionName -externalDomainSuffix $externalDomainSuffix
+            -regionName $Using:regionName -externalDomainSuffix $Using:externalDomainSuffix
     } -Verbose -ErrorAction Stop
 }
 JobLauncher -jobName $jobName -jobToExecute $AddVMExtensions -Verbose
@@ -1878,7 +1878,7 @@ $UploadScripts = {
         Set-Location $Using:ScriptLocation; .\Scripts\UploadScripts.ps1 -ASDKpath $Using:ASDKpath -tenantID $Using:TenantID -asdkCreds $Using:asdkCreds `
             -deploymentMode $Using:deploymentMode -azsLocation $Using:azsLocation -ScriptLocation $Using:ScriptLocation -sqlServerInstance $Using:sqlServerInstance `
             -databaseName $Using:databaseName -tableName $Using:tableName `
-            -regionName $regionName -externalDomainSuffix $externalDomainSuffix
+            -regionName $Using:regionName -externalDomainSuffix $Using:externalDomainSuffix
     } -Verbose -ErrorAction Stop
 }
 JobLauncher -jobName $jobName -jobToExecute $UploadScripts -Verbose
@@ -1895,7 +1895,7 @@ $DeployMySQLHost = {
             -secureVMpwd $Using:secureVMpwd -VMpwd $Using:VMpwd -asdkCreds $Using:asdkCreds -ScriptLocation $Using:ScriptLocation -azsLocation $Using:azsLocation `
             -skipMySQL $Using:skipMySQL -skipMSSQL $Using:skipMSSQL -skipAppService $Using:skipAppService -branch $Using:branch -sqlServerInstance $Using:sqlServerInstance `
             -databaseName $Using:databaseName -tableName $Using:tableName `
-            -regionName $regionName -externalDomainSuffix $externalDomainSuffix
+            -regionName $Using:regionName -externalDomainSuffix $Using:externalDomainSuffix
     } -Verbose -ErrorAction Stop
 }
 JobLauncher -jobName $jobName -jobToExecute $DeployMySQLHost -Verbose
@@ -1908,7 +1908,7 @@ $DeploySQLServerHost = {
             -vmType "SQLServer" -tenantID $Using:TenantID -secureVMpwd $Using:secureVMpwd -VMpwd $Using:VMpwd -asdkCreds $Using:asdkCreds `
             -ScriptLocation $Using:ScriptLocation -azsLocation $Using:azsLocation -skipMySQL $Using:skipMySQL -skipMSSQL $Using:skipMSSQL `
             -skipAppService $Using:skipAppService -branch $Using:branch -sqlServerInstance $Using:sqlServerInstance -databaseName $Using:databaseName -tableName $Using:tableName `
-            -regionName $regionName -externalDomainSuffix $externalDomainSuffix
+            -regionName $Using:regionName -externalDomainSuffix $Using:externalDomainSuffix
     } -Verbose -ErrorAction Stop
 }
 JobLauncher -jobName $jobName -jobToExecute $DeploySQLServerHost -Verbose
@@ -1949,7 +1949,7 @@ $DeployAppServiceFS = {
             -vmType "AppServiceFS" -tenantID $Using:TenantID -secureVMpwd $Using:secureVMpwd -VMpwd $Using:VMpwd -asdkCreds $Using:asdkCreds `
             -ScriptLocation $Using:ScriptLocation -azsLocation $Using:azsLocation -skipMySQL $Using:skipMySQL -skipMSSQL $Using:skipMSSQL -skipAppService $Using:skipAppService `
             -branch $Using:branch -sqlServerInstance $Using:sqlServerInstance -databaseName $Using:databaseName -tableName $Using:tableName `
-            -regionName $regionName -externalDomainSuffix $externalDomainSuffix
+            -regionName $Using:regionName -externalDomainSuffix $Using:externalDomainSuffix
     } -Verbose -ErrorAction Stop
 }
 JobLauncher -jobName $jobName -jobToExecute $DeployAppServiceFS -Verbose
@@ -1962,7 +1962,7 @@ $DeployAppServiceDB = {
             -vmType "AppServiceDB" -tenantID $Using:TenantID -secureVMpwd $Using:secureVMpwd -VMpwd $Using:VMpwd -asdkCreds $Using:asdkCreds `
             -ScriptLocation $Using:ScriptLocation -azsLocation $Using:azsLocation -skipMySQL $Using:skipMySQL -skipMSSQL $Using:skipMSSQL -skipAppService $Using:skipAppService `
             -branch $Using:branch -sqlServerInstance $Using:sqlServerInstance -databaseName $Using:databaseName -tableName $Using:tableName `
-            -regionName $regionName -externalDomainSuffix $externalDomainSuffix
+            -regionName $Using:regionName -externalDomainSuffix $Using:externalDomainSuffix
     } -Verbose -ErrorAction Stop
 }
 JobLauncher -jobName $jobName -jobToExecute $DeployAppServiceDB -Verbose
@@ -1987,7 +1987,7 @@ $AddAppServicePreReqs = {
             -azureDirectoryTenantName $Using:azureDirectoryTenantName -tenantID $Using:tenantID -secureVMpwd $Using:secureVMpwd -ERCSip $Using:ERCSip `
             -asdkCreds $Using:asdkCreds -cloudAdminCreds $Using:cloudAdminCreds -ScriptLocation $Using:ScriptLocation -skipAppService $Using:skipAppService `
             -sqlServerInstance $Using:sqlServerInstance -databaseName $Using:databaseName -tableName $Using:tableName `
-            -regionName $regionName -externalDomainSuffix $externalDomainSuffix -appServicesCertsFolder $Using:appServicesCertsFolder
+            -regionName $Using:regionName -externalDomainSuffix $Using:externalDomainSuffix -appServicesCertsFolder $Using:appServicesCertsFolder
     } -Verbose -ErrorAction Stop
 }
 JobLauncher -jobName $jobName -jobToExecute $AddAppServicePreReqs -Verbose
@@ -2000,7 +2000,7 @@ $DeployAppService = {
             -authenticationType $Using:authenticationType -azureDirectoryTenantName $Using:azureDirectoryTenantName -tenantID $Using:tenantID -VMpwd $Using:VMpwd `
             -asdkCreds $Using:asdkCreds -ScriptLocation $Using:ScriptLocation -skipAppService $Using:skipAppService -branch $Using:branch `
             -sqlServerInstance $Using:sqlServerInstance -databaseName $Using:databaseName -tableName $Using:tableName `
-            -regionName $regionName -externalDomainSuffix $externalDomainSuffix
+            -regionName $Using:regionName -externalDomainSuffix $Using:externalDomainSuffix
     } -Verbose -ErrorAction Stop
 }
 JobLauncher -jobName $jobName -jobToExecute $DeployAppService -Verbose
