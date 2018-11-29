@@ -187,7 +187,11 @@ param (
 
     # External Domain Suffix for if you need to override the default 'azurestack.external'
     [parameter(Mandatory = $false)]
-    [string]$externalDomainSuffix = 'azurestack.external'
+    [string]$externalDomainSuffix = 'azurestack.external',
+
+	# Source path for cert overrides
+	[Parameter(Mandatory = $false)]
+    [string] $appServicesCertsFolder
 )
 
 $Global:VerbosePreference = "Continue"
@@ -1983,7 +1987,7 @@ $AddAppServicePreReqs = {
             -azureDirectoryTenantName $Using:azureDirectoryTenantName -tenantID $Using:tenantID -secureVMpwd $Using:secureVMpwd -ERCSip $Using:ERCSip `
             -asdkCreds $Using:asdkCreds -cloudAdminCreds $Using:cloudAdminCreds -ScriptLocation $Using:ScriptLocation -skipAppService $Using:skipAppService `
             -sqlServerInstance $Using:sqlServerInstance -databaseName $Using:databaseName -tableName $Using:tableName `
-            -regionName $regionName -externalDomainSuffix $externalDomainSuffix
+            -regionName $regionName -externalDomainSuffix $externalDomainSuffix -appServicesCertsFolder $Using:appServicesCertsFolder
     } -Verbose -ErrorAction Stop
 }
 JobLauncher -jobName $jobName -jobToExecute $AddAppServicePreReqs -Verbose

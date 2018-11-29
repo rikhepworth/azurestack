@@ -52,7 +52,11 @@ param (
     
     # External Domain Suffix for if you need to override the default 'azurestack.external'
     [Parameter(Mandatory = $false)]
-    [string] $externalDomainSuffix = 'azurestack.external'
+    [string] $externalDomainSuffix = 'azurestack.external',
+
+	# Source path for cert overrides
+	[Parameter(Mandatory = $false)]
+    [string] $appServicesCertsFolder
 )
 
 $Global:VerbosePreference = "Continue"
@@ -120,7 +124,18 @@ elseif (($skipAppService -eq $false) -and ($progressCheck -ne "Complete")) {
             Set-Location "$AppServicePath"
             
             if (!$([System.IO.File]::Exists("$AppServicePath\CertsCreated.txt"))) {
-                .\Create-AppServiceCerts.ps1 -PfxPassword $secureVMpwd -DomainName "$regionName.$externalDomainSuffix"
+				if ([string]::IsNullOrEmpty($appServicesCertsFolder)) {
+					.\Create-AppServiceCerts.ps1 -PfxPassword $secureVMpwd -DomainName "$regionName.$externalDomainSuffix"
+				}
+				else {
+					$certs = get-childitem -Path $appServicesCertsFolder -Recurse -Filter "*.$regionName.$externalDomainSuffix.pfx"
+					if ((($certs.name) -match "api") -and (($certs.name) -match "_") -and (($certs.name) -match "ftp") -and (($certs.name) -match "sso")) {
+						$certs | Copy-Item -Destination $AppServicePath
+					}
+					else {
+						throw "App Services Certificate path provided but one or more certs are missing"
+					}
+				}
                 .\Get-AzureStackRootCert.ps1 -PrivilegedEndpoint $ERCSip -CloudAdminCredential $cloudAdminCreds
                 New-Item -Path "$AppServicePath\CertsCreated.txt" -ItemType file -Force
             }
