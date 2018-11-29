@@ -58,7 +58,12 @@ param (
     
     # External Domain Suffix for if you need to override the default 'azurestack.external'
     [Parameter(Mandatory = $false)]
-    [string] $externalDomainSuffix = 'azurestack.external'
+    [string] $externalDomainSuffix = 'azurestack.external',
+
+	# Github Account to override Matt's repo for download
+	[Parameter(Mandatory = $false)]
+    [String] $gitHubAccount = 'rikhepworth'
+
 )
 
 $Global:VerbosePreference = "Continue"
@@ -221,11 +226,11 @@ elseif (($skipRP -eq $false) -and ($progressCheck -ne "Complete")) {
             # Dynamically retrieve the mainTemplate.json URI from the Azure Stack Gallery to determine deployment base URI
             if ($deploymentMode -eq "Online") {
                 if ($vmType -eq "AppServiceFS") {
-                    $mainTemplateURI = "https://raw.githubusercontent.com/mattmcspirit/azurestack/$branch/deployment/templates/FileServer/azuredeploy.json"
+                    $mainTemplateURI = "https://raw.githubusercontent.com/$gitHubAccount/azurestack/$branch/deployment/templates/FileServer/azuredeploy.json"
                 }
                 else {
                     $mainTemplateURI = $(Get-AzsGalleryItem | Where-Object {$_.Name -like "ASDK.$azpkg*"}).DefinitionTemplates.DeploymentTemplateFileUris.Values | Where-Object {$_ -like "*mainTemplate.json"}
-                    $scriptBaseURI = "https://raw.githubusercontent.com/mattmcspirit/azurestack/master/deployment/scripts/"
+                    $scriptBaseURI = "https://raw.githubusercontent.com/$gitHubAccount/azurestack/master/deployment/scripts/"
                 }
             }
             elseif (($deploymentMode -eq "PartialOnline") -or ($deploymentMode -eq "Offline")) {

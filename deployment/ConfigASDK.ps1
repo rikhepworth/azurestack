@@ -1729,7 +1729,7 @@ $AddUbuntuImage = {
             -azureRegSubId $Using:azureRegSubId -azureRegTenantID $Using:azureRegTenantID -tenantID $Using:TenantID -azureRegCreds $Using:azureRegCreds `
             -asdkCreds $Using:asdkCreds -ScriptLocation $Using:ScriptLocation -ISOpath $Using:ISOpath -image "UbuntuServer" -branch $Using:branch -runMode $Using:runMode `
             -sqlServerInstance $Using:sqlServerInstance -databaseName $Using:databaseName -tableName $Using:tableName `
-            -regionName $Using:regionName -externalDomainSuffix $Using:externalDomainSuffix
+            -regionName $Using:regionName -externalDomainSuffix $Using:externalDomainSuffix -gitHubAccount $Using:gitHubAccount
     } -Verbose -ErrorAction Stop
 }
 JobLauncher -jobName $jobName -jobToExecute $AddUbuntuImage -Verbose
@@ -1755,7 +1755,7 @@ $AddServerCoreImage = {
             -deploymentMode $Using:deploymentMode -modulePath $Using:modulePath -azureRegSubId $Using:azureRegSubId -azureRegTenantID $Using:azureRegTenantID `
             -tenantID $Using:TenantID -azureRegCreds $Using:azureRegCreds -asdkCreds $Using:asdkCreds -ScriptLocation $Using:ScriptLocation -ISOpath $Using:ISOpath `
             -image "ServerCore" -branch $Using:branch -sqlServerInstance $Using:sqlServerInstance -databaseName $Using:databaseName -tableName $Using:tableName -runMode $Using:runMode `
-            -regionName $Using:regionName -externalDomainSuffix $Using:externalDomainSuffix
+            -regionName $Using:regionName -externalDomainSuffix $Using:externalDomainSuffix -gitHubAccount $Using:gitHubAccount
     } -Verbose -ErrorAction Stop
 }
 JobLauncher -jobName $jobName -jobToExecute $AddServerCoreImage -Verbose
@@ -1770,7 +1770,7 @@ $AddServerFullImage = {
             -azureRegSubId $Using:azureRegSubId -azureRegTenantID $Using:azureRegTenantID -tenantID $Using:TenantID -azureRegCreds $Using:azureRegCreds `
             -asdkCreds $Using:asdkCreds -ScriptLocation $Using:ScriptLocation -ISOpath $Using:ISOpath -image "ServerFull" -branch $Using:branch `
             -sqlServerInstance $Using:sqlServerInstance -databaseName $Using:databaseName -tableName $Using:tableName -runMode $Using:runMode `
-            -regionName $Using:regionName -externalDomainSuffix $Using:externalDomainSuffix
+            -regionName $Using:regionName -externalDomainSuffix $Using:externalDomainSuffix -gitHubAccount $Using:gitHubAccount
     } -Verbose -ErrorAction Stop
 }
 JobLauncher -jobName $jobName -jobToExecute $AddServerFullImage -Verbose
@@ -1786,7 +1786,7 @@ $AddMySQLAzpkg = {
         Set-Location $Using:ScriptLocation; .\Scripts\AddGalleryItems.ps1 -ASDKpath $Using:ASDKpath -azsLocation $Using:azsLocation `
             -deploymentMode $Using:deploymentMode -tenantID $Using:TenantID -asdkCreds $Using:asdkCreds -ScriptLocation $Using:ScriptLocation -branch $Using:branch `
             -azpkg "MySQL" -sqlServerInstance $Using:sqlServerInstance -databaseName $Using:databaseName -tableName $Using:tableName `
-			-regionName $Using:regionName -externalDomainSuffix $Using:externalDomainSuffix
+			-regionName $Using:regionName -externalDomainSuffix $Using:externalDomainSuffix -gitHubAccount $Using:gitHubAccount
     } -Verbose -ErrorAction Stop
 }
 JobLauncher -jobName $jobName -jobToExecute $AddMySQLAzpkg -Verbose
@@ -1798,7 +1798,7 @@ $AddSQLServerAzpkg = {
         Set-Location $Using:ScriptLocation; .\Scripts\AddGalleryItems.ps1 -ASDKpath $Using:ASDKpath -azsLocation $Using:azsLocation `
             -deploymentMode $Using:deploymentMode -tenantID $Using:TenantID -asdkCreds $Using:asdkCreds -ScriptLocation $Using:ScriptLocation -branch $Using:branch `
             -azpkg "SQLServer" -sqlServerInstance $Using:sqlServerInstance -databaseName $Using:databaseName -tableName $Using:tableName `
-			-regionName $Using:regionName -externalDomainSuffix $Using:externalDomainSuffix
+			-regionName $Using:regionName -externalDomainSuffix $Using:externalDomainSuffix -gitHubAccount $Using:gitHubAccount
     } -Verbose -ErrorAction Stop
 }
 JobLauncher -jobName $jobName -jobToExecute $AddSQLServerAzpkg -Verbose
@@ -1897,7 +1897,7 @@ $DeployMySQLHost = {
             -secureVMpwd $Using:secureVMpwd -VMpwd $Using:VMpwd -asdkCreds $Using:asdkCreds -ScriptLocation $Using:ScriptLocation -azsLocation $Using:azsLocation `
             -skipMySQL $Using:skipMySQL -skipMSSQL $Using:skipMSSQL -skipAppService $Using:skipAppService -branch $Using:branch -sqlServerInstance $Using:sqlServerInstance `
             -databaseName $Using:databaseName -tableName $Using:tableName `
-            -regionName $Using:regionName -externalDomainSuffix $Using:externalDomainSuffix
+            -regionName $Using:regionName -externalDomainSuffix $Using:externalDomainSuffix -gitHubAccount $Using:gitHubAccount
     } -Verbose -ErrorAction Stop
 }
 JobLauncher -jobName $jobName -jobToExecute $DeployMySQLHost -Verbose
@@ -1910,7 +1910,7 @@ $DeploySQLServerHost = {
             -vmType "SQLServer" -tenantID $Using:TenantID -secureVMpwd $Using:secureVMpwd -VMpwd $Using:VMpwd -asdkCreds $Using:asdkCreds `
             -ScriptLocation $Using:ScriptLocation -azsLocation $Using:azsLocation -skipMySQL $Using:skipMySQL -skipMSSQL $Using:skipMSSQL `
             -skipAppService $Using:skipAppService -branch $Using:branch -sqlServerInstance $Using:sqlServerInstance -databaseName $Using:databaseName -tableName $Using:tableName `
-            -regionName $Using:regionName -externalDomainSuffix $Using:externalDomainSuffix
+            -regionName $Using:regionName -externalDomainSuffix $Using:externalDomainSuffix -gitHubAccount $Using:gitHubAccount
     } -Verbose -ErrorAction Stop
 }
 JobLauncher -jobName $jobName -jobToExecute $DeploySQLServerHost -Verbose
@@ -1924,7 +1924,8 @@ $AddMySQLHosting = {
         $asdkCreds, $ScriptLocation, $skipMySQL, $skipMSSQL, $branch, $sqlServerInstance, $databaseName, $tableName -ScriptBlock {
         Set-Location $Using:ScriptLocation; .\Scripts\AddDBHosting.ps1 -ASDKpath $Using:ASDKpath -deploymentMode $Using:deploymentMode -dbHost "MySQL" `
             -tenantID $Using:TenantID -secureVMpwd $Using:secureVMpwd -asdkCreds $Using:asdkCreds -ScriptLocation $Using:ScriptLocation -skipMySQL $Using:skipMySQL `
-            -skipMSSQL $Using:skipMSSQL -branch $Using:branch -sqlServerInstance $Using:sqlServerInstance -databaseName $Using:databaseName -tableName $Using:tableName
+            -skipMSSQL $Using:skipMSSQL -branch $Using:branch -sqlServerInstance $Using:sqlServerInstance -databaseName $Using:databaseName -tableName $Using:tableName `
+			-gitHubAccount $Using:gitHubAccount
     } -Verbose -ErrorAction Stop
 }
 JobLauncher -jobName $jobName -jobToExecute $AddMySQLHosting -Verbose
@@ -1951,7 +1952,7 @@ $DeployAppServiceFS = {
             -vmType "AppServiceFS" -tenantID $Using:TenantID -secureVMpwd $Using:secureVMpwd -VMpwd $Using:VMpwd -asdkCreds $Using:asdkCreds `
             -ScriptLocation $Using:ScriptLocation -azsLocation $Using:azsLocation -skipMySQL $Using:skipMySQL -skipMSSQL $Using:skipMSSQL -skipAppService $Using:skipAppService `
             -branch $Using:branch -sqlServerInstance $Using:sqlServerInstance -databaseName $Using:databaseName -tableName $Using:tableName `
-            -regionName $Using:regionName -externalDomainSuffix $Using:externalDomainSuffix
+            -regionName $Using:regionName -externalDomainSuffix $Using:externalDomainSuffix -gitHubAccount $Using:gitHubAccount
     } -Verbose -ErrorAction Stop
 }
 JobLauncher -jobName $jobName -jobToExecute $DeployAppServiceFS -Verbose
@@ -1964,7 +1965,7 @@ $DeployAppServiceDB = {
             -vmType "AppServiceDB" -tenantID $Using:TenantID -secureVMpwd $Using:secureVMpwd -VMpwd $Using:VMpwd -asdkCreds $Using:asdkCreds `
             -ScriptLocation $Using:ScriptLocation -azsLocation $Using:azsLocation -skipMySQL $Using:skipMySQL -skipMSSQL $Using:skipMSSQL -skipAppService $Using:skipAppService `
             -branch $Using:branch -sqlServerInstance $Using:sqlServerInstance -databaseName $Using:databaseName -tableName $Using:tableName `
-            -regionName $Using:regionName -externalDomainSuffix $Using:externalDomainSuffix
+            -regionName $Using:regionName -externalDomainSuffix $Using:externalDomainSuffix -gitHubAccount $Using:gitHubAccount
     } -Verbose -ErrorAction Stop
 }
 JobLauncher -jobName $jobName -jobToExecute $DeployAppServiceDB -Verbose

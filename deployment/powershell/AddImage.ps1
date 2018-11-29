@@ -62,7 +62,12 @@ param (
     
     # External Domain Suffix for if you need to override the default 'azurestack.external'
     [Parameter(Mandatory = $false)]
-    [string] $externalDomainSuffix = 'azurestack.external'
+    [string] $externalDomainSuffix = 'azurestack.external',
+
+	# Github Account to override Matt's repo for download
+	[Parameter(Mandatory = $false)]
+    [String] $gitHubAccount = 'rikhepworth'
+
 )
 
 $Global:VerbosePreference = "Continue"
@@ -400,7 +405,7 @@ if (($progressCheck -eq "Incomplete") -or ($progressCheck -eq "Failed")) {
                         # Split for Windows Server Images
                         if ($deploymentMode -eq "Online") {
                             # Download Convert-WindowsImage.ps1
-                            $convertWindowsURI = "https://raw.githubusercontent.com/mattmcspirit/azurestack/$branch/deployment/scripts/Convert-WindowsImage.ps1"
+                            $convertWindowsURI = "https://raw.githubusercontent.com/$gitHubAccountt/azurestack/$branch/deployment/scripts/Convert-WindowsImage.ps1"
                             $convertWindowsDownloadLocation = "$ASDKpath\images\$image\Convert-Windows$($image)Image.ps1"
                             $convertWindowsImageExists = [System.IO.File]::Exists("$ASDKpath\images\$image\Convert-Windows$($image)Image.ps1")
                             if ($convertWindowsImageExists -eq $false) {
@@ -544,10 +549,10 @@ if (($progressCheck -eq "Incomplete") -or ($progressCheck -eq "Failed")) {
             }
             elseif (($registerASDK -eq $false) -and ($deploymentMode -eq "Online")) {
                 if ($image -eq "UbuntuServer") {
-                    $azpkgPackageURL = "https://github.com/mattmcspirit/azurestack/raw/$branch/deployment/packages/Ubuntu/Canonical.UbuntuServer1604LTS-ARM.1.0.0.azpkg"
+                    $azpkgPackageURL = "https://github.com/$gitHubAccount/azurestack/raw/$branch/deployment/packages/Ubuntu/Canonical.UbuntuServer1604LTS-ARM.1.0.0.azpkg"
                 }
                 else {
-                    $azpkgPackageURL = "https://github.com/mattmcspirit/azurestack/raw/$branch/deployment/packages/WindowsServer/$package.azpkg"
+                    $azpkgPackageURL = "https://github.com/$gitHubAccount/azurestack/raw/$branch/deployment/packages/WindowsServer/$package.azpkg"
                 }
             }
             # If this isn't an online deployment, use the extracted zip file, and upload to a storage account
