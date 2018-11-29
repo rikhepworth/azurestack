@@ -38,7 +38,20 @@ param (
     [String] $databaseName,
 
     [Parameter(Mandatory = $true)]
-    [String] $tableName
+    [String] $tableName,
+
+	# RegionName for if you need to override the default 'local'
+    [Parameter(Mandatory = $false)]
+    [string] $regionName = 'local',
+    
+    # External Domain Suffix for if you need to override the default 'azurestack.external'
+    [Parameter(Mandatory = $false)]
+    [string] $externalDomainSuffix = 'azurestack.external',
+
+	# Github Account to override Matt's repo for download
+	[Parameter(Mandatory = $false)]
+    [String] $gitHubAccount = 'rikhepworth'
+
 )
 
 $Global:VerbosePreference = "Continue"
@@ -112,7 +125,7 @@ elseif (($skipRP -eq $false) -and ($progressCheck -ne "Complete")) {
                     throw "The $($dbHost)DBVM stage of the process has failed. This should fully complete before the $dbHost database host has been deployed. Check the $($dbHost)DBVM log, ensure that step is completed first, and rerun."
                 }
             }
-            $ArmEndpoint = "https://adminmanagement.local.azurestack.external"
+            $ArmEndpoint = "https://adminmanagement.$regionName.$externalDomainSuffix"
             Add-AzureRMEnvironment -Name "AzureStackAdmin" -ArmEndpoint "$ArmEndpoint" -ErrorAction Stop
             Add-AzureRmAccount -EnvironmentName "AzureStackAdmin" -TenantId $tenantID -Credential $asdkCreds -ErrorAction Stop | Out-Null
             $dbrg = "azurestack-dbhosting"
@@ -141,7 +154,7 @@ elseif (($skipRP -eq $false) -and ($progressCheck -ne "Complete")) {
             # Add host server to MySQL RP
             Write-Verbose -Message "Attaching $dbHost hosting server to $dbHost resource provider"
             if ($deploymentMode -eq "Online") {
-                $templateURI = "https://raw.githubusercontent.com/mattmcspirit/azurestack/$branch/deployment/templates/$hostingPath/azuredeploy.json"
+                $templateURI = "https://raw.githubusercontent.com/$gitHubAccount/azurestack/$branch/deployment/templates/$hostingPath/azuredeploy.json"
             }
             elseif (($deploymentMode -eq "PartialOnline") -or ($deploymentMode -eq "Offline")) {
                 $templateURI = Get-ChildItem -Path "$ASDKpath\templates" -Recurse -Include "$hostingTemplate" | ForEach-Object { $_.FullName }
