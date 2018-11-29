@@ -1451,7 +1451,7 @@ elseif ($authenticationType.ToString() -like "ADFS") {
         $tenantId = (invoke-restmethod "$($ADauth)/.well-known/openid-configuration").issuer.TrimEnd('/').Split('/')[-1]
         Write-CustomVerbose -Message "Logging in with your Azure Stack Administrator Account used with ADFS"
         $ArmEndpoint = "https://adminmanagement.$regionName.$externalDomainSuffix"
-        Add-AzureRMEnvironment -Name "AzureStackAdmin" -ArmEndpoint "$ArmEndpoint" -EnableAdfsAuthentication:$true -ErrorAction Stop
+        Add-AzureRMEnvironment -Name "AzureStackAdmin" -ArmEndpoint "$ArmEndpoint" -ErrorAction Stop
         $testAzureSub = Add-AzureRmAccount -EnvironmentName "AzureStackAdmin" -TenantId $tenantID -Subscription "Default Provider Subscription" -Credential $asdkCreds -ErrorAction Stop
         $testAzureSub = $testAzureSub | Out-String
         Write-CustomVerbose -Message "Selected Azure Stack Subscription is:"
