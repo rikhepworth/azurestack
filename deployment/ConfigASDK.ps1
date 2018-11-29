@@ -1785,7 +1785,8 @@ $AddMySQLAzpkg = {
         $branch, $sqlServerInstance, $databaseName, $tableName -ScriptBlock {
         Set-Location $Using:ScriptLocation; .\Scripts\AddGalleryItems.ps1 -ASDKpath $Using:ASDKpath -azsLocation $Using:azsLocation `
             -deploymentMode $Using:deploymentMode -tenantID $Using:TenantID -asdkCreds $Using:asdkCreds -ScriptLocation $Using:ScriptLocation -branch $Using:branch `
-            -azpkg "MySQL" -sqlServerInstance $Using:sqlServerInstance -databaseName $Using:databaseName -tableName $Using:tableName
+            -azpkg "MySQL" -sqlServerInstance $Using:sqlServerInstance -databaseName $Using:databaseName -tableName $Using:tableName `
+			-regionName $Using:regionName -externalDomainSuffix $Using:externalDomainSuffix
     } -Verbose -ErrorAction Stop
 }
 JobLauncher -jobName $jobName -jobToExecute $AddMySQLAzpkg -Verbose
@@ -1796,7 +1797,8 @@ $AddSQLServerAzpkg = {
         $branch, $sqlServerInstance, $databaseName, $tableName -ScriptBlock {
         Set-Location $Using:ScriptLocation; .\Scripts\AddGalleryItems.ps1 -ASDKpath $Using:ASDKpath -azsLocation $Using:azsLocation `
             -deploymentMode $Using:deploymentMode -tenantID $Using:TenantID -asdkCreds $Using:asdkCreds -ScriptLocation $Using:ScriptLocation -branch $Using:branch `
-            -azpkg "SQLServer" -sqlServerInstance $Using:sqlServerInstance -databaseName $Using:databaseName -tableName $Using:tableName
+            -azpkg "SQLServer" -sqlServerInstance $Using:sqlServerInstance -databaseName $Using:databaseName -tableName $Using:tableName `
+			-regionName $Using:regionName -externalDomainSuffix $Using:externalDomainSuffix
     } -Verbose -ErrorAction Stop
 }
 JobLauncher -jobName $jobName -jobToExecute $AddSQLServerAzpkg -Verbose
