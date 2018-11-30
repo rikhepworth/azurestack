@@ -405,7 +405,7 @@ if (($progressCheck -eq "Incomplete") -or ($progressCheck -eq "Failed")) {
                         # Split for Windows Server Images
                         if ($deploymentMode -eq "Online") {
                             # Download Convert-WindowsImage.ps1
-                            $convertWindowsURI = "https://raw.githubusercontent.com/$gitHubAccountt/azurestack/$branch/deployment/scripts/Convert-WindowsImage.ps1"
+                            $convertWindowsURI = "https://raw.githubusercontent.com/$gitHubAccount/azurestack/$branch/deployment/scripts/Convert-WindowsImage.ps1"
                             $convertWindowsDownloadLocation = "$ASDKpath\images\$image\Convert-Windows$($image)Image.ps1"
                             $convertWindowsImageExists = [System.IO.File]::Exists("$ASDKpath\images\$image\Convert-Windows$($image)Image.ps1")
                             if ($convertWindowsImageExists -eq $false) {
