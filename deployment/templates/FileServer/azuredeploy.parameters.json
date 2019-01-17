@@ -30,7 +30,7 @@
             "value": null
         },
       "vmExtensionScriptLocation": {
-        "value": "https://raw.githubusercontent.com/rikhepworth/azurestack/master/deployment/templates/FileServer/"
+        "value": "https://raw.githubusercontent.com/rikhepworth/azurestack/master/deployment/templates/FileServer/scripts"
       }
     }
 }
