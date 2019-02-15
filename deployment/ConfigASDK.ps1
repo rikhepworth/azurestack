@@ -1739,7 +1739,7 @@ $jobName = "DownloadWindowsUpdates"
 $DownloadWindowsUpdates = {
     Start-Job -Name DownloadWindowsUpdates -InitializationScript $export_functions -ArgumentList $ISOpath, $ASDKpath, $azsLocation, `
         $deploymentMode, $tenantID, $asdkCreds, $ScriptLocation, $sqlServerInstance, $databaseName, $tableName, $regionName, `
-        $externalDomainSuffix, $gitHubAccount -ScriptBlock {
+        $externalDomainSuffix  -ScriptBlock {
         Set-Location $Using:ScriptLocation; .\Scripts\DownloadWinUpdates.ps1 -ISOpath $Using:ISOpath -ASDKpath $Using:ASDKpath `
             -azsLocation $Using:azsLocation -deploymentMode $Using:deploymentMode -tenantID $Using:TenantID -asdkCreds $Using:asdkCreds `
             -sqlServerInstance $Using:sqlServerInstance -databaseName $Using:databaseName -tableName $Using:tableName -ScriptLocation $Using:ScriptLocation `
@@ -1758,7 +1758,7 @@ $AddServerCore2016Image = {
             -deploymentMode $Using:deploymentMode -modulePath $Using:modulePath -azureRegSubId $Using:azureRegSubId -azureRegTenantID $Using:azureRegTenantID `
             -tenantID $Using:TenantID -azureRegCreds $Using:azureRegCreds -asdkCreds $Using:asdkCreds -ScriptLocation $Using:ScriptLocation -ISOpath $Using:ISOpath `
             -image "ServerCore2016" -branch $Using:branch -sqlServerInstance $Using:sqlServerInstance -databaseName $Using:databaseName -tableName $Using:tableName -runMode $Using:runMode `
-            -regionName $Using:regionName -externalDomainSuffix $Using:externalDomainSuffix
+            -regionName $Using:regionName -externalDomainSuffix $Using:externalDomainSuffix -gitHubAccount $Using:gitHubAccount
     } -Verbose -ErrorAction Stop
 }
 JobLauncher -jobName $jobName -jobToExecute $AddServerCore2016Image -Verbose
@@ -1774,7 +1774,7 @@ $AddServerFull2016Image = {
             -azureRegSubId $Using:azureRegSubId -azureRegTenantID $Using:azureRegTenantID -tenantID $Using:TenantID -azureRegCreds $Using:azureRegCreds `
             -asdkCreds $Using:asdkCreds -ScriptLocation $Using:ScriptLocation -ISOpath $Using:ISOpath -image "ServerFull2016" -branch $Using:branch `
             -sqlServerInstance $Using:sqlServerInstance -databaseName $Using:databaseName -tableName $Using:tableName -runMode $Using:runMode `
-            -regionName $Using:regionName -externalDomainSuffix $Using:externalDomainSuffix
+            -regionName $Using:regionName -externalDomainSuffix $Using:externalDomainSuffix -gitHubAccount $Using:gitHubAccount
     } -Verbose -ErrorAction Stop
 }
 JobLauncher -jobName $jobName -jobToExecute $AddServerFull2016Image -Verbose
