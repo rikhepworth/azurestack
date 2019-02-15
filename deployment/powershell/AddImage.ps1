@@ -158,9 +158,9 @@ elseif ((!$skip2019Images) -and ($progressCheck -ne "Complete")) {
             Clear-AzureRmContext -Scope CurrentUser -Force
             Disable-AzureRMContextAutosave -Scope CurrentUser
 
-            Write-Host "Importing storage modules"
-            Import-Module -Name Azure.Storage -RequiredVersion 4.5.0
-            Import-Module -Name AzureRM.Storage -RequiredVersion 5.0.4
+            #Write-Host "Importing storage modules"
+            #Import-Module -Name Azure.Storage -RequiredVersion 4.5.0
+            #Import-Module -Name AzureRM.Storage -RequiredVersion 5.0.4
 
             # Need to confirm if Windows Update stage previously completed
             if ($image -ne "UbuntuServer") {
