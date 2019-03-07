@@ -54,7 +54,7 @@
       "value": ""
     },
     "scriptBaseUrl": {
-      "value": "https://raw.githubusercontent.com/rikhepworth/azurestack/master/deployment/scripts/"
+      "value": "https://raw.githubusercontent.com/rikhepworth/azurestack/1901/deployment/scripts/"
     }
   }
 }

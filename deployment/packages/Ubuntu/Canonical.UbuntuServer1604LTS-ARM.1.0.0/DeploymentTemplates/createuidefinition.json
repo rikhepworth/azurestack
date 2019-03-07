@@ -22,7 +22,7 @@
       "offer": "UbuntuServer",
       "sku": "16.04-LTS"
     },
-    "diskType": "Standard",
+    "diskType": "Premimum",
     "dataDisks": [],
     "supportsSriov": true,
     "supportsBackup": true,
