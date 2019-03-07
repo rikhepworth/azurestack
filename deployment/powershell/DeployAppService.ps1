@@ -41,15 +41,7 @@ param (
     [String] $databaseName,
 
     [Parameter(Mandatory = $true)]
-    [String] $tableName,
-
-    # RegionName for if you need to override the default 'local'
-    [Parameter(Mandatory = $false)]
-    [string] $regionName = 'local',
-    
-    # External Domain Suffix for if you need to override the default 'azurestack.external'
-    [Parameter(Mandatory = $false)]
-    [string] $externalDomainSuffix = 'azurestack.external'
+    [String] $tableName
 )
 
 $Global:VerbosePreference = "Continue"
@@ -96,6 +88,9 @@ elseif (($skipAppService -eq $false) -and ($progressCheck -ne "Complete")) {
             Clear-AzureRmContext -Scope CurrentUser -Force
             Disable-AzureRMContextAutosave -Scope CurrentUser
 
+            Import-Module -Name Azure.Storage -RequiredVersion 4.5.0 -Verbose
+            Import-Module -Name AzureRM.Storage -RequiredVersion 5.0.4 -Verbose
+
             # Need to ensure this stage doesn't start before the App Service components have been downloaded
             $appServicePreReqJobCheck = CheckProgress -progressStage "AddAppServicePreReqs"
             while ($appServicePreReqJobCheck -ne "Complete") {
@@ -127,7 +122,7 @@ elseif (($skipAppService -eq $false) -and ($progressCheck -ne "Complete")) {
                 }
             }
             # Login to Azure Stack to grab FQDNs and also Identity App ID locally
-            $ArmEndpoint = "https://adminmanagement.$regionName.$externalDomainSuffix"
+            $ArmEndpoint = "https://adminmanagement.local.azurestack.external"
             Add-AzureRMEnvironment -Name "AzureStackAdmin" -ArmEndpoint "$ArmEndpoint" -ErrorAction Stop
             Add-AzureRmAccount -EnvironmentName "AzureStackAdmin" -TenantId $tenantID -Credential $asdkCreds -ErrorAction Stop | Out-Null
             $fileServerFqdn = (Get-AzureRmPublicIpAddress -Name "fileserver_ip" -ResourceGroupName "appservice-fileshare").DnsSettings.Fqdn
@@ -152,7 +147,7 @@ elseif (($skipAppService -eq $false) -and ($progressCheck -ne "Complete")) {
                 throw "Missing File Server FQDN - Exiting process"
             }
             if ($VMpwd) {
-                Write-Host "Virtual Machine password is present: $VMpwd"
+                Write-Host "Virtual Machine password is present."
             }
             else {
                 throw "Missing Virtual Machine password - Exiting process"
@@ -175,7 +170,7 @@ elseif (($skipAppService -eq $false) -and ($progressCheck -ne "Complete")) {
 
             # Pull the pre-deployment JSON file from online, or the local zip file.
             if ($deploymentMode -eq "Online") {
-                $appServiceJsonURI = "https://raw.githubusercontent.com/rikhepworth/azurestack/$branch/deployment/appservice/AppServiceDeploymentSettings.json"
+                $appServiceJsonURI = "https://raw.githubusercontent.com/mattmcspirit/azurestack/$branch/deployment/appservice/AppServiceDeploymentSettings.json"
                 $appServiceJsonDownloadLocation = "$AppServicePath\AppServicePreDeploymentSettings.json"
                 DownloadWithRetry -downloadURI "$appServiceJsonURI" -downloadLocation "$appServiceJsonDownloadLocation" -retries 10
             }
@@ -196,8 +191,6 @@ elseif (($skipAppService -eq $false) -and ($progressCheck -ne "Complete")) {
             elseif ($authenticationType.ToString() -like "ADFS") {
                 $JsonConfig = $JsonConfig.Replace("<<AzureDirectoryTenantName>>", "adfs")
             }
-			$JsonConfig = $JsonConfig.Replace("<<RegionName>>", $regionName)
-			$JsonConfig = $JsonConfig.Replace("<<ExternalDomainSuffix>>", $externalDomainSuffix)
             $JsonConfig = $JsonConfig.Replace("<<FileServerDNSLabel>>", $fileServerFqdn)
             $JsonConfig = $JsonConfig.Replace("<<Password>>", $VMpwd)
             $CertPathDoubleSlash = $AppServicePath.Replace("\", "\\")
@@ -215,7 +208,7 @@ elseif (($skipAppService -eq $false) -and ($progressCheck -ne "Complete")) {
             $appServiceDBCheck = Get-SqlInstance -ServerInstance $sqlAppServerFqdn -Credential $dbCreds | Get-SqlDatabase | Where-Object {$_.Name -like "*appservice*"}
             foreach ($appServiceDB in $appServiceDBCheck) {
                 Write-Host "$($appServiceDB.Name) database found. Cleaning up to ensure a successful rerun of the AppService deployment"
-                $cleanupQuery = "DROP DATABASE $($appServiceDB.Name)"
+                $cleanupQuery = "ALTER DATABASE $($appServiceDB.Name) SET SINGLE_USER WITH ROLLBACK IMMEDIATE; DROP DATABASE $($appServiceDB.Name)"
                 Invoke-Sqlcmd -Server $sqlAppServerFqdn -Credential $dbCreds -Query "$cleanupQuery" -Verbose 
             }
 
@@ -227,7 +220,7 @@ elseif (($skipAppService -eq $false) -and ($progressCheck -ne "Complete")) {
 
             # Check if there is a previous failure for the App Service deployment - easier to completely clean the RG and start fresh
             $azsLocation = (Get-AzsLocation).Name
-            $ArmEndpoint = "https://adminmanagement.$regionName.$externalDomainSuffix"
+            $ArmEndpoint = "https://adminmanagement.local.azurestack.external"
             Add-AzureRMEnvironment -Name "AzureStackAdmin" -ArmEndpoint "$ArmEndpoint" -ErrorAction Stop
             Add-AzureRmAccount -EnvironmentName "AzureStackAdmin" -TenantId $tenantID -Credential $asdkCreds -ErrorAction Stop | Out-Null
             $appServiceFailCheck = (Get-AzureRmResourceGroupDeployment -ResourceGroupName "appservice-infra" -Name "AppService.DeployCloud" -ErrorAction SilentlyContinue)
@@ -271,7 +264,7 @@ elseif (($skipAppService -eq $false) -and ($progressCheck -ne "Complete")) {
             }
             Write-Host "Checking App Service resource group for successful deployment"
             # Ensure logged into Azure Stack
-            $ArmEndpoint = "https://adminmanagement.$regionName.$externalDomainSuffix"
+            $ArmEndpoint = "https://adminmanagement.local.azurestack.external"
             Add-AzureRMEnvironment -Name "AzureStackAdmin" -ArmEndpoint "$ArmEndpoint" -ErrorAction Stop
             Add-AzureRmAccount -EnvironmentName "AzureStackAdmin" -TenantId $tenantID -Credential $asdkCreds -ErrorAction Stop | Out-Null
             $appServiceRgCheck = (Get-AzureRmResourceGroupDeployment -ResourceGroupName "appservice-infra" -Name "AppService.DeployCloud" -ErrorAction SilentlyContinue)

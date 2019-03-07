@@ -25,6 +25,9 @@ param (
     [parameter(Mandatory = $true)]
     [String] $ERCSip,
 
+    [Parameter(Mandatory = $true)]
+    [String] $branch,
+
     [parameter(Mandatory = $true)]
     [pscredential] $asdkCreds,
 
@@ -44,19 +47,7 @@ param (
     [String] $databaseName,
 
     [Parameter(Mandatory = $true)]
-    [String] $tableName,
-
-    # RegionName for if you need to override the default 'local'
-    [Parameter(Mandatory = $false)]
-    [string] $regionName = 'local',
-    
-    # External Domain Suffix for if you need to override the default 'azurestack.external'
-    [Parameter(Mandatory = $false)]
-    [string] $externalDomainSuffix = 'azurestack.external',
-
-	# Source path for cert overrides
-	[Parameter(Mandatory = $false)]
-    [string] $appServicesCertsFolder
+    [String] $tableName
 )
 
 $Global:VerbosePreference = "Continue"
@@ -114,9 +105,12 @@ elseif (($skipAppService -eq $false) -and ($progressCheck -ne "Complete")) {
                     throw "The DownloadAppService stage of the process has failed. This should fully complete before the App Service PreReqs can be started. Check the DownloadAppService log, ensure that step is completed first, and rerun."
                 }
             }
-            $ArmEndpoint = "https://adminmanagement.$regionName.$externalDomainSuffix"
+            $ArmEndpoint = "https://adminmanagement.local.azurestack.external"
             Add-AzureRMEnvironment -Name "AzureStackAdmin" -ArmEndpoint "$ArmEndpoint" -ErrorAction Stop
             $ADauth = (Get-AzureRmEnvironment -Name "AzureStackAdmin").ActiveDirectoryAuthority.TrimEnd('/')
+
+            Import-Module -Name Azure.Storage -RequiredVersion 4.5.0 -Verbose
+            Import-Module -Name AzureRM.Storage -RequiredVersion 5.0.4 -Verbose
 
             #### Certificates ####
             Write-Host "Generating Certificates for App Service"
@@ -124,18 +118,7 @@ elseif (($skipAppService -eq $false) -and ($progressCheck -ne "Complete")) {
             Set-Location "$AppServicePath"
             
             if (!$([System.IO.File]::Exists("$AppServicePath\CertsCreated.txt"))) {
-				if ([string]::IsNullOrEmpty($appServicesCertsFolder)) {
-					.\Create-AppServiceCerts.ps1 -PfxPassword $secureVMpwd -DomainName "$regionName.$externalDomainSuffix"
-				}
-				else {
-					$certs = get-childitem -Path $appServicesCertsFolder -Recurse -Filter "*.$regionName.$externalDomainSuffix.pfx"
-					if ((($certs.name) -match "api") -and (($certs.name) -match "_") -and (($certs.name) -match "ftp") -and (($certs.name) -match "sso")) {
-						$certs | Copy-Item -Destination $AppServicePath
-					}
-					else {
-						throw "App Services Certificate path provided but one or more certs are missing"
-					}
-				}
+                .\Create-AppServiceCerts.ps1 -PfxPassword $secureVMpwd -DomainName "local.azurestack.external"
                 .\Get-AzureStackRootCert.ps1 -PrivilegedEndpoint $ERCSip -CloudAdminCredential $cloudAdminCreds
                 New-Item -Path "$AppServicePath\CertsCreated.txt" -ItemType file -Force
             }
@@ -152,22 +135,43 @@ elseif (($skipAppService -eq $false) -and ($progressCheck -ne "Complete")) {
                     $tenantId = (Invoke-RestMethod "$($ADauth)/$($azureDirectoryTenantName)/.well-known/openid-configuration").issuer.TrimEnd('/').Split('/')[-1]
                     Add-AzureRmAccount -EnvironmentName "AzureCloud" -TenantId $tenantId -Credential $asdkCreds -ErrorAction Stop
                     Set-Location "$AppServicePath"
-                    $appID = . .\Create-AADIdentityApp.ps1 -DirectoryTenantName "$azureDirectoryTenantName" -AdminArmEndpoint "adminmanagement.$regionName.$externalDomainSuffix" -TenantArmEndpoint "management.$regionName.$externalDomainSuffix" `
-                        -CertificateFilePath "$AppServicePath\sso.appservice.$regionName.$externalDomainSuffix.pfx" -CertificatePassword $secureVMpwd -AzureStackAdminCredential $asdkCreds
-                    $appIdPath = "$downloadPath\ApplicationIDBackup.txt"
+                    $appID = . .\Create-AADIdentityApp.ps1 -DirectoryTenantName "$azureDirectoryTenantName" -AdminArmEndpoint "adminmanagement.local.azurestack.external" -TenantArmEndpoint "management.local.azurestack.external" `
+                        -CertificateFilePath "$AppServicePath\sso.appservice.local.azurestack.external.pfx" -CertificatePassword $secureVMpwd -AzureStackAdminCredential $asdkCreds
                     $identityApplicationID = $applicationId
-                    New-Item $appIdPath -ItemType file -Force
-                    Write-Output $identityApplicationID > $appIdPath
                     Write-Host "You don't need to sign into the Azure Portal to grant permissions, ASDK Configurator will automate this for you. Please wait."
                     Start-Sleep -Seconds 20
+                    # Create Cleanup Doc - First Create File
+                    $cleanUpAppServicePs1Path = "$downloadPath\ASDKAppServiceCleanUp.ps1"
+                    Remove-Item -Path $cleanUpAppServicePs1Path -Confirm:$false -Force -ErrorAction SilentlyContinue -Verbose
+                    New-Item "$cleanUpAppServicePs1Path" -ItemType file -Force
+                    # Populate key info
+                    Write-Output "# This script should be used to remove an App Service resource from Azure AD, prior to redeploying your ASDK on this hardware." -Verbose -ErrorAction Stop | Out-File -FilePath "$cleanUpAppServicePs1Path" -Force -Verbose -Append
+                    Write-Output "# Values are already populated based on the prior deployment.`n" -Verbose -ErrorAction Stop | Out-File -FilePath "$cleanUpAppServicePs1Path" -Force -Verbose -Append
+                    Write-Output "# Populate key parameters" -Verbose -ErrorAction Stop | Out-File -FilePath "$cleanUpAppServicePs1Path" -Force -Verbose -Append
+                    Write-Output "`$identityApplicationID = `"$identityApplicationID`"" -Verbose -ErrorAction Stop | Out-File -FilePath "$cleanUpAppServicePs1Path" -Force -Verbose -Append
+                    # Populate AAD Information
+                    Write-Output "`n# Populate AAD Information" -Verbose -ErrorAction Stop | Out-File -FilePath "$cleanUpAppServicePs1Path" -Force -Verbose -Append
+                    $azureUsername = $($asdkCreds).UserName
+                    Write-Output "`$azureUsername = `"$azureUsername`"" -Verbose -ErrorAction Stop | Out-File -FilePath "$cleanUpAppServicePs1Path" -Force -Verbose -Append
+                    Write-Output "`$azureTenantID = `"$tenantID`"" -Verbose -ErrorAction Stop | Out-File -FilePath "$cleanUpAppServicePs1Path" -Force -Verbose -Append
+                    Write-Output "`$azureCreds = Get-Credential -UserName `"$azureUsername`" -Message `"Enter the AAD password you used when deploying this ASDK with the username: $azureUsername.`"" -Verbose -ErrorAction Stop | Out-File -FilePath "$cleanUpAppServicePs1Path" -Force -Verbose -Append
+                    Write-Output "`$azureLogin = Add-AzureRmAccount -EnvironmentName `"AzureCloud`" -tenantId `"$tenantId`" -Credential `$azureCreds" -ErrorAction Stop | Out-File -FilePath "$cleanUpAppServicePs1Path" -Force -Verbose -Append
+                    # Remove the App from Azure AD
+                    Write-Output "`n# Remove the App from Azure AD" -Verbose -ErrorAction Stop | Out-File -FilePath "$cleanUpAppServicePs1Path" -Force -Verbose -Append
+                    Write-Output "`$appToRemove = Get-AzureRmADApplication | Where-Object {`$_.ApplicationId -eq `"$identityApplicationID`"} -ErrorAction SilentlyContinue -Verbose" | Out-File -FilePath "$cleanUpAppServicePs1Path" -Force -Verbose -Append
+                    Write-Output "Set-AzureRMADApplication -ObjectId `$appToRemove.ObjectId -AvailableToOtherTenants `$false -Verbose -ErrorAction Stop" | Out-File -FilePath "$cleanUpAppServicePs1Path" -Force -Verbose -Append
+                    Write-Output "Remove-AzureRMADApplication -ObjectId `$appToRemove.ObjectId -ErrorAction Stop -Verbose -Force" | Out-File -FilePath "$cleanUpAppServicePs1Path" -Force -Verbose -Append
+                    $appIdPath = "$downloadPath\ApplicationIDBackup.txt"
+                    New-Item $appIdPath -ItemType file -Force
+                    Write-Output $identityApplicationID > $appIdPath
                 }
                 elseif ($authenticationType.ToString() -like "ADFS") {
-                    $ArmEndpoint = "https://adminmanagement.$regionName.$externalDomainSuffix"
+                    $ArmEndpoint = "https://adminmanagement.local.azurestack.external"
                     Add-AzureRMEnvironment -Name "AzureStackAdmin" -ArmEndpoint "$ArmEndpoint" -ErrorAction Stop
                     Add-AzureRmAccount -EnvironmentName "AzureStackAdmin" -TenantId $TenantID -Credential $asdkCreds -ErrorAction Stop | Out-Null
                     Set-Location "$AppServicePath"
-                    $appID = .\Create-ADFSIdentityApp.ps1 -AdminArmEndpoint "adminmanagement.$regionName.$externalDomainSuffix" -PrivilegedEndpoint $ERCSip `
-                        -CertificateFilePath "$AppServicePath\sso.appservice.$regionName.$externalDomainSuffix.pfx" -CertificatePassword $secureVMpwd -CloudAdminCredential $asdkCreds
+                    $appID = .\Create-ADFSIdentityApp.ps1 -AdminArmEndpoint "adminmanagement.local.azurestack.external" -PrivilegedEndpoint $ERCSip `
+                        -CertificateFilePath "$AppServicePath\sso.appservice.local.azurestack.external.pfx" -CertificatePassword $secureVMpwd -CloudAdminCredential $asdkCreds
                     $appIdPath = "$downloadPath\ApplicationIDBackup.txt"
                     $identityApplicationID = $appID
                     New-Item $appIdPath -ItemType file -Force
@@ -232,6 +236,132 @@ elseif (($skipAppService -eq $false) -and ($progressCheck -ne "Complete")) {
                     Write-Host "Azure AD Permissions have been previously granted successfully"
                 }
             }
+
+            # Sideload the Custom Script Extension if the user is not registering
+            # Check there's not a gallery item already uploaded to storage
+            # Log back into Azure Stack
+            # Firstly need to establish a check to see if the AddVmExtensions job is executing (to avoid conflict) and if it is, wait.  If it's not, start the sideload process.
+
+            $AddVmExtensionsJobCheck = CheckProgress -progressStage "AddVMExtensions"
+            while ($AddVmExtensionsJobCheck -ne "Complete") {
+                Write-Host "The AddVMExtensions stage of the process has not yet completed. Checking again in 20 seconds"
+                Start-Sleep -Seconds 20
+                $AddVmExtensionsJobCheck = CheckProgress -progressStage "AddVMExtensions"
+                if ($AddVmExtensionsJobCheck -eq "Skipped") {
+                    Write-Host "The AddVMExtensions stage of the process was skipped - the script will proceed to sideload a valid Custom Script Extension (1.9.x) into your Azure Stack environment to allow App Service deployment to continue."
+                    BREAK
+                }
+                elseif ($AddVmExtensionsJobCheck -eq "Failed") {
+                    Write-Host "The AddVMExtensions stage of the process failed - the script will proceed to sideload a valid Custom Script Extension (1.9.x) into your Azure Stack environment to allow App Service deployment to continue."
+                    BREAK
+                }
+            }
+
+            Add-AzureRmAccount -EnvironmentName "AzureStackAdmin" -TenantId $TenantID -Credential $asdkCreds -ErrorAction Stop | Out-Null
+            if ((Get-AzsVMExtension -Publisher Microsoft.Compute -Verbose:$false) | Where-Object {($_.ExtensionType -eq "CustomScriptExtension") -and ($_.TypeHandlerVersion -ge "1.9") -and ($_.ProvisioningState -eq "Succeeded")}) {
+                Write-Verbose -Message "You already have a valid Custom Script Extension (1.9.x) within your Azure Stack environment. App Service deployment can continue."
+            }
+            else {
+                Write-Verbose -Message "You are missing a valid Custom Script Extension (1.9.x) within your Azure Stack environment. We will manually add one to your Azure Stack"
+                $extensionPath = "$ASDKpath\appservice\extension"
+                $extensionZipPath = "$ASDKpath\appservice\extension\CSE.zip"
+                [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+                if ($deploymentMode -eq "Online") {
+                    if (-not [System.IO.File]::Exists("$ASDKpath\appservice\extension\CSE.zip")) {
+                        Write-Verbose "This is an online deployment - downloading the Custom Script Extension from GitHub"
+                        $extensionURI = "https://raw.githubusercontent.com/mattmcspirit/azurestack/$branch/deployment/appservice/extension/CSE.zip"
+                        DownloadWithRetry -downloadURI $extensionURI -downloadLocation $extensionZipPath -retries 10
+                    }
+                    else {
+                        Write-Verbose "Valid CSE.zip file found at $extensionZipPath. No need to download."
+                    }
+                }
+                elseif ($deploymentMode -ne "Online") {
+                    if (-not [System.IO.File]::Exists("$extensionZipPath")) {
+                        throw "Missing CSE.zip file in extracted dependencies folder. Please ensure this exists at $extensionZipPath - Exiting process"
+                    }
+                    else {
+                        Write-Verbose "Valid CSE.zip file found at $extensionZipPath. Continuing process."
+                    }
+                }
+                Write-Verbose "Extracting CSE.zip file"
+                Expand-Archive "$extensionZipPath" -DestinationPath "$extensionPath" -Force
+            
+                # Create RG and Storage
+                $asdkExtensionRGName = "azurestack-extension"
+                $asdkExtensionStorageAccountName = "asdkextensionstor"
+                $asdkExtensionContainerName = "asdkextensioncontainer"
+                $azsLocation = (Get-AzsLocation).Name
+                # Test/Create RG
+                if (-not (Get-AzureRmResourceGroup -Name $asdkExtensionRGName -Location $azsLocation -ErrorAction SilentlyContinue)) { New-AzureRmResourceGroup -Name $asdkExtensionRGName -Location $azsLocation -Force -Confirm:$false -ErrorAction Stop }
+                # Test/Create Storage
+                $asdkStorageAccount = Get-AzureRmStorageAccount -Name $asdkExtensionStorageAccountName -ResourceGroupName $asdkExtensionRGName -ErrorAction SilentlyContinue
+                if (-not ($asdkStorageAccount)) { $asdkStorageAccount = New-AzureRmStorageAccount -Name $asdkExtensionStorageAccountName -Location $azsLocation -ResourceGroupName $asdkExtensionRGName -Type Standard_LRS -ErrorAction Stop }
+                Set-AzureRmCurrentStorageAccount -StorageAccountName $asdkExtensionStorageAccountName -ResourceGroupName $asdkExtensionRGName | Out-Null
+                # Test/Create Container
+                $asdkContainer = Get-AzureStorageContainer -Name $asdkExtensionContainerName -ErrorAction SilentlyContinue
+                if (-not ($asdkContainer)) { $asdkContainer = New-AzureStorageContainer -Name $asdkExtensionContainerName -Permission Blob -Context $asdkStorageAccount.Context -ErrorAction Stop }
+            
+                # Upload files to Storage
+                $extensionArray = @()
+                $extensionArray.Clear()
+                $extensionArray = Get-ChildItem -Path "$extensionPath" -Recurse -Include ("*.zip", "*.azpkg") -Exclude "CSE.zip" -ErrorAction Stop -Verbose
+                foreach ($item in $extensionArray) {
+                    $itemName = $item.Name
+                    $itemFullPath = $item.FullName
+                    $uploadItemAttempt = 1
+                    $sideloadCSEZipAttempt = 1
+                    #$sideloadCSEAzpkgAttempt = 1
+                    while (!$(Get-AzureStorageBlob -Container $asdkExtensionContainerName -Blob $itemName -Context $asdkExtensionStorageAccount.Context -ErrorAction SilentlyContinue) -and ($uploadItemAttempt -le 3)) {
+                        try {
+                            # Log back into Azure Stack to ensure login hasn't timed out
+                            Write-Host "$itemName not found. Upload Attempt: $uploadItemAttempt"
+                            Add-AzureRmAccount -EnvironmentName "AzureStackAdmin" -TenantId $TenantID -Credential $asdkCreds -ErrorAction Stop | Out-Null
+                            Set-AzureStorageBlobContent -File "$itemFullPath" -Container $asdkExtensionContainerName -Blob "$itemName" -Context $asdkExtensionStorageAccount.Context -ErrorAction Stop -Verbose | Out-Null
+                        }
+                        catch {
+                            Write-Host "Upload failed."
+                            Write-Host "$_.Exception.Message"
+                            $uploadItemAttempt++
+                        }
+                    }
+                    if ($item.Extension -eq ".zip") {
+                        while ($null -eq ((Get-AzsVMExtension -Publisher Microsoft.Compute -Verbose:$false) | Where-Object {($_.ExtensionType -eq "CustomScriptExtension") -and ($_.TypeHandlerVersion -ge "1.9") -and ($_.ProvisioningState -eq "Succeeded")}) -and ($sideloadCSEZipAttempt -le 3)) {
+                            try {
+                                # Log back into Azure Stack to ensure login hasn't timed out
+                                Add-AzureRmAccount -EnvironmentName "AzureStackAdmin" -TenantId $TenantID -Credential $asdkCreds -ErrorAction Stop | Out-Null
+                                Write-Verbose -Message "Adding Custom Script Extension (ZIP) to your environment. Attempt: $sideloadCSEZipAttempt"
+                                $URI = '{0}{1}/{2}' -f $asdkStorageAccount.PrimaryEndpoints.Blob, $asdkExtensionContainerName, $itemName
+                                $version = "1.9.1"
+                                Add-AzsVMExtension -Publisher "Microsoft.Compute" -Type "CustomScriptExtension" -Version "$version" -ComputeRole "IaaS" -SourceBlob "$URI" -VmOsType "Windows" -ErrorAction Stop -Verbose -Force
+                                Start-Sleep -Seconds 5
+                            }
+                            catch {
+                                Write-Verbose -Message "Upload failed."
+                                Write-Verbose -Message "$_.Exception.Message"
+                                $sideloadCSEZipAttempt++
+                            }
+                        }
+                    }
+                    <#elseif ($item.Extension -eq ".azpkg") {
+                        while ($null -eq (Get-AzsGalleryItem | Where-Object {($_.ItemName -like "*CustomScriptExtension*") -and ($_.Version -ge "2.0.50")}) -and ($sideloadCSEAzpkgAttempt -le 3)) {
+                            try {
+                                # Log back into Azure Stack to ensure login hasn't timed out
+                                Add-AzureRmAccount -EnvironmentName "AzureStackAdmin" -TenantId $TenantID -Credential $asdkCreds -ErrorAction Stop | Out-Null
+                                Write-Verbose -Message "Adding Custom Script Extension (AZPKG) to your environment. Attempt: $sideloadCSEAzpkgAttempt"
+                                $URI = '{0}{1}/{2}' -f $asdkStorageAccount.PrimaryEndpoints.Blob, $asdkExtensionContainerName, $itemName
+                                Add-AzsGalleryItem -GalleryItemUri "URI" -ErrorAction Stop -Verbose -Force
+                            }
+                            catch {
+                                Write-Verbose -Message "Upload failed."
+                                Write-Verbose -Message "$_.Exception.Message"
+                                $sideloadCSEAzpkgAttempt++
+                            }
+                        }
+                    }#>
+                }
+            }
+
             # Update the ConfigASDK database with successful completion
             $progressStage = $progressName
             StageComplete -progressStage $progressStage
@@ -245,6 +375,7 @@ elseif (($skipAppService -eq $false) -and ($progressCheck -ne "Complete")) {
     }
 }
 elseif ($skipAppService -and ($progressCheck -ne "Complete")) {
+    Write-Host "Operator chose to skip App Service Deployment`r`n"
     # Update the ConfigASDK database with skip status
     $progressStage = $progressName
     StageSkipped -progressStage $progressStage

@@ -22,15 +22,7 @@ param (
     [String] $databaseName,
 
     [Parameter(Mandatory = $true)]
-    [String] $tableName,
-
-    # RegionName for if you need to override the default 'local'
-    [Parameter(Mandatory = $false)]
-    [string] $regionName = 'local',
-    
-    # External Domain Suffix for if you need to override the default 'azurestack.external'
-    [Parameter(Mandatory = $false)]
-    [string] $externalDomainSuffix = 'azurestack.external'
+    [String] $tableName
 )
 
 $Global:VerbosePreference = "Continue"
@@ -65,6 +57,9 @@ if (($registerASDK -eq $true) -and ($deploymentMode -ne "Offline")) {
             Clear-AzureRmContext -Scope CurrentUser -Force
             Disable-AzureRMContextAutosave -Scope CurrentUser
 
+            Import-Module -Name Azure.Storage -RequiredVersion 4.5.0 -Verbose
+            Import-Module -Name AzureRM.Storage -RequiredVersion 5.0.4 -Verbose
+
             # Currently an infinite loop bug exists in Azs.AzureBridge.Admin 0.1.1 - this section fixes it by editing the Get-TaskResult.ps1 file
             if (!(Get-Module -Name Azs.AzureBridge.Admin)) {
                 Import-Module Azs.AzureBridge.Admin -Force
@@ -89,7 +84,7 @@ if (($registerASDK -eq $true) -and ($deploymentMode -ne "Offline")) {
                     }
                 }
             }
-            $ArmEndpoint = "https://adminmanagement.$regionName.$externalDomainSuffix"
+            $ArmEndpoint = "https://adminmanagement.local.azurestack.external"
             Add-AzureRmEnvironment -Name "AzureStackAdmin" -ArmEndpoint "$ArmEndpoint" -ErrorAction Stop
             Add-AzureRmAccount -EnvironmentName "AzureStackAdmin" -TenantId $tenantID -Credential $asdkCreds -ErrorAction Stop | Out-Null
             $activationName = "default"

@@ -54,20 +54,7 @@ param (
     [String] $databaseName,
 
     [Parameter(Mandatory = $true)]
-    [String] $tableName,
-
-	# RegionName for if you need to override the default 'local'
-    [Parameter(Mandatory = $false)]
-    [string] $regionName = 'local',
-    
-    # External Domain Suffix for if you need to override the default 'azurestack.external'
-    [Parameter(Mandatory = $false)]
-    [string] $externalDomainSuffix = 'azurestack.external',
-
-	# Github Account to override Matt's repo for download
-	[Parameter(Mandatory = $false)]
-    [String] $gitHubAccount = 'rikhepworth'
-
+    [String] $tableName
 )
 
 $Global:VerbosePreference = "Continue"
@@ -208,7 +195,7 @@ if (($progressCheck -eq "Incomplete") -or ($progressCheck -eq "Failed")) {
         }
 
         # Log into Azure Stack to check for existing images and push new ones if required ###
-        $ArmEndpoint = "https://adminmanagement.$regionName.$externalDomainSuffix"
+        $ArmEndpoint = "https://adminmanagement.local.azurestack.external"
         Add-AzureRMEnvironment -Name "AzureStackAdmin" -ArmEndpoint "$ArmEndpoint" -ErrorAction Stop
         Add-AzureRmAccount -EnvironmentName "AzureStackAdmin" -TenantId $TenantID -Credential $asdkCreds -ErrorAction Stop | Out-Null
         if ($registerASDK -and ($deploymentMode -eq "Online")) {
@@ -393,7 +380,7 @@ if (($progressCheck -eq "Incomplete") -or ($progressCheck -eq "Failed")) {
                         # Split for Windows Server Images
                         if ($deploymentMode -eq "Online") {
                             # Download Convert-WindowsImage.ps1
-                            $convertWindowsURI = "https://raw.githubusercontent.com/$gitHubAccount/azurestack/$branch/deployment/scripts/Convert-WindowsImage.ps1"
+                            $convertWindowsURI = "https://raw.githubusercontent.com/mattmcspirit/azurestack/$branch/deployment/scripts/Convert-WindowsImage.ps1"
                             $convertWindowsDownloadLocation = "$ASDKpath\images\$image\Convert-Windows$($image)Image.ps1"
                             $convertWindowsImageExists = [System.IO.File]::Exists("$ASDKpath\images\$image\Convert-Windows$($image)Image.ps1")
                             if ($convertWindowsImageExists -eq $false) {
@@ -537,10 +524,10 @@ if (($progressCheck -eq "Incomplete") -or ($progressCheck -eq "Failed")) {
             }
             elseif (!$registerASDK -and ($deploymentMode -eq "Online")) {
                 if ($image -eq "UbuntuServer") {
-                    $azpkgPackageURL = "https://github.com/$gitHubAccount/azurestack/raw/$branch/deployment/packages/Ubuntu/Canonical.UbuntuServer1804LTS-ARM.1.0.0.azpkg"
+                    $azpkgPackageURL = "https://github.com/mattmcspirit/azurestack/raw/$branch/deployment/packages/Ubuntu/Canonical.UbuntuServer1804LTS-ARM.1.0.0.azpkg"
                 }
                 else {
-                    $azpkgPackageURL = "https://github.com/$gitHubAccount/azurestack/raw/$branch/deployment/packages/WindowsServer/$package.azpkg"
+                    $azpkgPackageURL = "https://github.com/mattmcspirit/azurestack/raw/$branch/deployment/packages/WindowsServer/$package.azpkg"
                 }
             }
             # If this isn't an online deployment, use the extracted zip file, and upload to a storage account

@@ -5,6 +5,26 @@ Version History
 -----------
 Here you'll find information on key changes, bug fixes and improvements made by version.
 
+### What's new in version 1811.2?
+* New -serialMode to deploy VMs one at a time - useful for older, lower performance hardware
+* Support for Database RPs 1.1.33.0
+* Bug fixes and logging cleanup - removal of passwords from logs
+
+### What's new in version 1811.1?
+* Updated to support Azure Stack PowerShell 1.6.0
+* Adding v1.9.1 of Custom Script Extension when not registering to allow App Service install
+* Bug fixes
+
+### What's new in version 1811?
+* Updated to support ASDK 1.1811.0.101
+* Updated Windows Server image updates with dynamically obtaining Servicing Stack Update
+* Increased App Service VM Image size - More reliable
+* Bug fixes
+
+### What's new in version 1809.3?
+* Adjusted VM sizes for Resource Providers to use less resources
+* Added host memory check to avoid running out of memory
+
 ### What's new in version 1809.2?
 * App Service SQL DB Cleanup for reruns
 * Cleans up App Service Resource Group in case of previous run failure - ensures fresh next attempt

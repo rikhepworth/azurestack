@@ -70,6 +70,9 @@ elseif (($skipAppService -eq $false) -and ($progressCheck -ne "Complete")) {
                 if (!$([System.IO.Directory]::Exists("$ASDKpath\appservice"))) {
                     New-Item -Path "$ASDKpath\appservice" -ItemType Directory -Force | Out-Null
                 }
+                if (!$([System.IO.Directory]::Exists("$ASDKpath\appservice\extension"))) {
+                    New-Item -Path "$ASDKpath\appservice\extension" -ItemType Directory -Force | Out-Null
+                }
                 # Install App Service To be added
                 Write-Host "Downloading App Service Installer"
                 Set-Location "$ASDKpath\appservice"
@@ -78,7 +81,7 @@ elseif (($skipAppService -eq $false) -and ($progressCheck -ne "Complete")) {
                 $appServiceHelperURI = "https://aka.ms/appsvconmashelpers"
                 $appServiceHelperDownloadLocation = "$ASDKpath\appservice\appservicehelper.zip"
                 DownloadWithRetry -downloadURI "$appServiceHelperURI" -downloadLocation "$appServiceHelperDownloadLocation" -retries 10
-                $appServiceExeURI = "https://aka.ms/appsvcupdate4installer"
+                $appServiceExeURI = "https://aka.ms/appsvconmasinstaller"
                 $appServiceExeDownloadLocation = "$ASDKpath\appservice\appservice.exe"
                 DownloadWithRetry -downloadURI "$appServiceExeURI" -downloadLocation "$appServiceExeDownloadLocation" -retries 10
             }

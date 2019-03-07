@@ -271,7 +271,7 @@
                 "autoUpgradeMinorVersion": "true",
                 "settings": {
                     "fileUris": [
-                        "https://raw.githubusercontent.com/rikhepworth/azurestack/master/scripts/install_jenkins.sh"
+                        "https://raw.githubusercontent.com/mattmcspirit/azurestack/master/scripts/install_jenkins.sh"
                     ]
                 },
                 "protectedSettings": {

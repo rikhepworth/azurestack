@@ -257,7 +257,7 @@
                 "autoUpgradeMinorVersion": "true",
                 "settings": {
                     "fileUris": [
-                        "https://raw.githubusercontent.com/rikhepworth/azurestack/master/scripts/install_terraform.sh"
+                        "https://raw.githubusercontent.com/mattmcspirit/azurestack/master/scripts/install_terraform.sh"
                     ]
                 },
                 "protectedSettings": {

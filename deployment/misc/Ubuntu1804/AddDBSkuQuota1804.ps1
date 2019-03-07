@@ -29,20 +29,7 @@ param (
     [String] $databaseName,
 
     [Parameter(Mandatory = $true)]
-    [String] $tableName,
-
-	# RegionName for if you need to override the default 'local'
-    [Parameter(Mandatory = $false)]
-    [string] $regionName = 'local',
-    
-    # External Domain Suffix for if you need to override the default 'azurestack.external'
-    [Parameter(Mandatory = $false)]
-    [string] $externalDomainSuffix = 'azurestack.external',
-
-	# Github Account to override Matt's repo for download
-	[Parameter(Mandatory = $false)]
-    [String] $gitHubAccount = 'rikhepworth'
-
+    [String] $tableName
 )
 
 $Global:VerbosePreference = "Continue"
@@ -112,7 +99,7 @@ elseif (($skipRP -eq $false) -and ($progressCheck -ne "Complete")) {
             }
 
             ### Login to Azure Stack ###
-            $ArmEndpoint = "https://adminmanagement.$regionName.$externalDomainSuffix"
+            $ArmEndpoint = "https://adminmanagement.local.azurestack.external"
             Add-AzureRMEnvironment -Name "AzureStackAdmin" -ArmEndpoint "$ArmEndpoint" -ErrorAction Stop
             Add-AzureRmAccount -EnvironmentName "AzureStackAdmin" -TenantId $tenantID -Credential $asdkCreds -ErrorAction Stop | Out-Null
             $sub = Get-AzureRmSubscription | Where-Object {$_.Name -eq "Default Provider Subscription"}

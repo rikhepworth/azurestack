@@ -1,4 +1,4 @@
-<#
+﻿<#
 
 .SYNOPSYS
 
@@ -39,6 +39,18 @@
     * Supports usage in offline/disconnected environments
 
 .VERSION
+    1811.2  New -serialMode to deploy VMs one at a time - useful for older, lower performance hardware
+            Support for Database RPs 1.1.33.0
+            Bug fixes and logging cleanup - removal of passwords from logs
+    1811.1  Updated to support Azure Stack PowerShell 1.6.0
+            Adding v1.9.1 of Custom Script Extension when not registering to allow App Service install
+            Bug fixes
+    1811    Updated to support 1.1811.0.101
+            Updated Windows Server image updates with dynamically obtaining Servicing Stack Update
+            Increased App Service VM Image size - More reliable
+            Bug fixes
+    1809.3  Adjusted VM sizes for Resource Providers to use less resources
+            Added host memory check to avoid running out of memory
     1809.2  App Service SQL DB Cleanup for reruns
             Cleans up App Service Resource Group in case of previous run failure - ensures fresh next attempt
             Adjusted Windows Update download to grab KB from different source web page - old one not being updated
@@ -177,21 +189,8 @@ param (
     [Parameter(Mandatory = $false)]
     [String] $branch,
 
-	# Github Account to override Matt's repo for download
-	[Parameter(Mandatory = $false)]
-    [String] $gitHubAccount = 'rikhepworth',
-
-    # RegionName for if you need to override the default 'Local'
-    [parameter(Mandatory = $false)]
-    [string]$regionName = 'local',
-
-    # External Domain Suffix for if you need to override the default 'azurestack.external'
-    [parameter(Mandatory = $false)]
-    [string]$externalDomainSuffix = 'azurestack.external',
-
-	# Source path for cert overrides
-	[Parameter(Mandatory = $false)]
-    [string] $appServicesCertsFolder
+    # If you have older hardware that can't handle concurrent VM deployments, use this flag
+    [switch]$serialMode
 )
 
 $Global:VerbosePreference = "Continue"
@@ -479,7 +478,7 @@ $logPath = "$ScriptLocation\Logs\$logDate"
 Write-CustomVerbose -Message "Log folder full path is $logPath"
 
 ### START LOGGING ###
-$runTime = $(Get-Date).ToString("MMdd-HHmmss")
+$runTime = $(Get-Date).ToString("MMddyy-HHmmss")
 $fullLogPath = "$logPath\ConfigASDKLog$runTime.txt"
 $logStart = Start-Transcript -Path "$fullLogPath" -Append
 Write-CustomVerbose -Message $logStart
@@ -525,6 +524,58 @@ catch {
     Write-CustomVerbose -Message "$_.Exception.Message" -ErrorAction Stop
     Set-Location $ScriptLocation
     return
+}
+
+### HOST MEMORY CHECK ###############################################################################################################################################
+##############################################################################################################################################################
+
+Write-CustomVerbose -Message "Validating ASDK host memory to ensure you can deploy the additional resource providers on this system"
+Write-CustomVerbose -Message "Calculating ASDK host memory"
+[INT]$totalPhysicalMemory = Get-CimInstance win32_ComputerSystem -Verbose:$false | ForEach-Object {[math]::round($_.TotalPhysicalMemory / 1GB)}
+Write-CustomVerbose -Message "Total physical memory in the ASDK host = $([INT]$totalPhysicalMemory)GB"
+[INT]$totalRPMemoryRequired = "0"
+if (!$skipMySQL) {
+    Write-CustomVerbose -Message "You've chosen to deploy the MySQL Resource Provider. This requires 5.5GB RAM"
+    [INT]$totalRPMemoryRequired = [INT]$totalRPMemoryRequired + 5.5
+}
+if (!$skipMSSQL) {
+    Write-CustomVerbose -Message "You've chosen to deploy the SQL Server Resource Provider. This requires 5.5GB RAM"
+    [INT]$totalRPMemoryRequired = [INT]$totalRPMemoryRequired + 5.5
+}
+if (!$skipAppService) {
+    Write-CustomVerbose -Message "You've chosen to deploy the App Service Resource Provider. This requires 23GB RAM"
+    [INT]$totalRPMemoryRequired = [INT]$totalRPMemoryRequired + 23
+}
+if ([INT]$totalRPMemoryRequired -gt 0) {
+    Write-CustomVerbose -Message "Based on your resource provider selections, you need a total of $([INT]$totalRPMemoryRequired)GB to install the Resource Providers"
+    Write-CustomVerbose -Message "Calculating total current Azure Stack VM memory usage"
+    $azureStackVMs = Get-VM | Where-Object {$_.VMName -like "*Azs*"}
+    $azureStackVMs | Format-Table Name, State, @{n = "Memory"; e = {$_.memoryassigned / 1MB}} -AutoSize
+    Remove-Variable -Name totalVmMemory -Force -ErrorAction SilentlyContinue
+    $totalVmMemory = $azureStackVMs | Measure-Object memoryassigned –sum
+    $totalVmMemory = [math]::round($totalVmMemory.sum / 1GB)
+    [INT]$totalVmMemory = $totalVmMemory
+    Write-CustomVerbose -Message "Total physical memory in the ASDK host = $([INT]$totalPhysicalMemory)GB"
+    Write-CustomVerbose -Message "Total memory currently assigned to Azure Stack VMs on the ASDK host = $([INT]$totalVmMemory)GB"
+    Write-CustomVerbose -Message "Total memory required by your selected resource provider VMs on the ASDK host = $([INT]$totalRPMemoryRequired)GB"
+    [INT]$memoryAvailable = [INT]$totalPhysicalMemory - [INT]$totalVmMemory
+    if ([INT]$memoryAvailable -gt [INT]$totalRPMemoryRequired) {
+        Write-CustomVerbose -Message "You have $([INT]$memoryAvailable)GB memory available on your host, which is enough to run your chosen resource providers"
+        Remove-Variable -Name totalFreeMemory -Force -ErrorAction SilentlyContinue
+        [INT]$totalFreeMemory = Get-CimInstance Win32_OperatingSystem -Verbose:$false | ForEach-Object {[math]::round($_.FreePhysicalMemory / 1MB)}
+        Write-CustomVerbose -Message "However, the ASDK host OS is reporting a total of $([INT]$totalFreeMemory)GB free physical memory"
+        [INT]$memoryDifference = ([INT]$totalPhysicalMemory - [INT]$totalFreeMemory) - [INT]$totalVmMemory
+        Write-CustomVerbose -Message "This is a difference of $([INT]$memoryDifference)GB on top of the Azure Stack VM usage, and is most likely consumed by system processes and overheads."
+        Write-CustomVerbose -Message "If you run out of memory, this may cause the ASDK Configurator to fail."
+        Start-Sleep 10
+    }
+    else {
+        throw "Your ASDK host only has $([INT]$memoryAvailable)GB memory remaining, which is less than the required $([INT]$totalRPMemoryRequired)GB for your chosen resource providers.`
+    Add more memory or reduce the number of resource providers that you wish to deploy"
+    }
+}
+else {
+    Write-CustomVerbose -Message "It appears you've chosen to deploy none of the Resource Providers. No need for further host memory checks"
 }
 
 ### VALIDATION ###############################################################################################################################################
@@ -607,13 +658,14 @@ catch {
     return
 }
 
+if (!$branch) {
+    $branch = "master"
+}
+
 # Validate Github branch exists - usually reserved for testing purposes
 if ($deploymentMode -eq "Online") {
     try {
-        if (!$branch) {
-            $branch = "master"
-        }
-        $urlToTest = "https://raw.githubusercontent.com/$gitHubAccount/azurestack/$branch/README.md"
+        $urlToTest = "https://raw.githubusercontent.com/mattmcspirit/azurestack/$branch/README.md"
         [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
         $statusCode = Invoke-WebRequest "$urlToTest" -UseBasicParsing -ErrorAction SilentlyContinue | ForEach-Object {$_.StatusCode} -ErrorAction SilentlyContinue
         if ($statusCode -eq 200) {
@@ -806,16 +858,16 @@ if ($authenticationType.ToString() -like "AzureAd") {
     
         Write-CustomVerbose -Message "Checking to see if the Azure AD username is correctly formatted..."
     
-        if ($azureRegUsername -cmatch $emailRegex -eq $true) {
+        if ($azureRegUsername.ToLower() -cmatch $emailRegex -eq $true) {
             Write-CustomVerbose -Message "Azure AD username is correctly formatted." 
             Write-CustomVerbose -Message "$azureRegUsername will be used to connect to Azure."
         }
     
-        elseif ($azureRegUsername -cmatch $emailRegex -eq $false) {
+        elseif ($azureRegUsername.ToLower() -cmatch $emailRegex -eq $false) {
             Write-CustomVerbose -Message "Azure AD username isn't correctly formatted. It should be entered in the format username@<directoryname>.onmicrosoft.com, or your own custom domain, for example username@contoso.com" 
             # Obtain new username
             $azureRegUsername = Read-Host "Enter Azure AD username again"
-            if ($azureRegUsername -cmatch $emailRegex -eq $true) {
+            if ($azureRegUsername.ToLower() -cmatch $emailRegex -eq $true) {
                 Write-CustomVerbose -Message "Azure AD username is correctly formatted." 
                 Write-CustomVerbose -Message "$azureRegUsername will be used to connect to Azure." 
             }
@@ -1061,6 +1113,8 @@ if (!($testEnvPath -contains "C:\Program Files\Microsoft SQL Server\140\Tools\Bi
 
 if ($deploymentMode -eq "Online") {
     # Install SQL Server Module from Online PSrepository
+    Register-PsRepository -Default -Verbose:$false -ErrorAction SilentlyContinue
+    Set-PSRepository -Name "PSGallery" -InstallationPolicy Trusted -Verbose:$false -ErrorAction SilentlyContinue
     if (!(Get-InstalledModule -Name SqlServer -ErrorAction SilentlyContinue -Verbose)) {
         Install-Module SqlServer -Force -Confirm:$false -AllowClobber -Verbose -ErrorAction Stop
     }
@@ -1113,7 +1167,7 @@ $configAsdkSqlLoginExists = Get-SqlLogin -ServerInstance $sqlServerInstance -Log
 if (!$configAsdkSqlLoginExists) {
     $sqlLocalDbAdmin = "asdkadmin"
     $sqlLocalDbCreds = New-Object -TypeName System.Management.Automation.PSCredential -ArgumentList $sqlLocalDbAdmin, $secureVMpwd -ErrorAction Stop
-    Add-SqlLogin -ServerInstance $sqlServerInstance -LoginName "asdkadmin" -LoginPSCredential $sqlLocalDbCreds -LoginType SqlLogin -DefaultDatabase "ConfigASDK" -Enable -GrantConnectSql -ErrorAction SilentlyContinue
+    Add-SqlLogin -ServerInstance $sqlServerInstance -LoginName "asdkadmin" -LoginPSCredential $sqlLocalDbCreds -LoginType SqlLogin -DefaultDatabase "ConfigASDK" -Enable -GrantConnectSql -ErrorAction SilentlyContinue -Verbose:$false
 }
 else {
     Write-Host "The ConfigASDK Admin Login already exists. No need to recreate."
@@ -1133,8 +1187,8 @@ if (!$configAsdkSqlTableExists) {
         Registration         = "Incomplete";
         UbuntuServerImage    = "Incomplete";
         WindowsUpdates       = "Incomplete";
-        ServerCore2016Image  = "Incomplete";
-        ServerFull2016Image  = "Incomplete";
+        ServerCoreImage      = "Incomplete";
+        ServerFullImage      = "Incomplete";
         MySQLGalleryItem     = "Incomplete";
         SQLServerGalleryItem = "Incomplete";
         AddVMExtensions      = "Incomplete";
@@ -1244,7 +1298,7 @@ if (($progressCheck -eq "Incomplete") -or ($progressCheck -eq "Failed")) {
         if ($deploymentMode -eq "Online") {
             # If this is an online deployment, pull down the PowerShell scripts from GitHub
             foreach ($script in $scriptArray) {
-                $scriptBaseURI = "https://raw.githubusercontent.com/$gitHubAccount/azurestack/$branch/deployment/powershell"
+                $scriptBaseURI = "https://raw.githubusercontent.com/mattmcspirit/azurestack/$branch/deployment/powershell"
                 $scriptDownloadPath = "$scriptPath\$script"
                 DownloadWithRetry -downloadURI "$scriptBaseURI/$script" -downloadLocation $scriptDownloadPath -retries 10
             }
@@ -1285,6 +1339,9 @@ if (($progressCheck -eq "Incomplete") -or ($progressCheck -eq "Failed")) {
         $psRepositorySourceLocation = "https://www.powershellgallery.com/api/v2"
         $psRepository = Get-PSRepository -ErrorAction SilentlyContinue | Where-Object {($_.Name -eq "$psRepositoryName") -and ($_.InstallationPolicy -eq "$psRepositoryInstallPolicy") -and ($_.SourceLocation -eq "$psRepositorySourceLocation")}
         if ($psRepository) {
+            $cleanupRequired = $false
+        }
+        else {
             $cleanupRequired = $true
         }
         try {
@@ -1296,11 +1353,9 @@ if (($progressCheck -eq "Incomplete") -or ($progressCheck -eq "Failed")) {
         if ($psRmProfle) {
             $cleanupRequired = $true
         }
-        $psAzureRmModuleCheck = Get-Module -Name AzureRM.* -ListAvailable
-        $psAzureStorageModuleCheck = Get-Module -Name Azure.Storage -ListAvailable
-        $psAzureStackModuleCheck = Get-Module -Name AzureStack -ListAvailable
+        $psAzureModuleCheck = Get-Module -Name Azure* -ListAvailable
         $psAzsModuleCheck = Get-Module -Name Azs.* -ListAvailable
-        if (($psAzureRmModuleCheck) -or ($psAzureStorageModuleCheck) -or ($psAzureStackModuleCheck) -or ($psAzsModuleCheck) ) {
+        if (($psAzureModuleCheck) -or ($psAzsModuleCheck) ) {
             $cleanupRequired = $true
         }
 
@@ -1321,13 +1376,10 @@ if (($progressCheck -eq "Incomplete") -or ($progressCheck -eq "Failed")) {
             catch [System.Management.Automation.CommandNotFoundException] {
                 $error.Clear()
             }
-            Get-Module -Name AzureRM.* -ListAvailable | Uninstall-Module -Force -ErrorAction SilentlyContinue -Verbose
-            Uninstall-Module -Name Azure.Storage -Force -ErrorAction SilentlyContinue -Verbose
-            Uninstall-Module -Name AzureRM.Bootstrapper -Force -ErrorAction SilentlyContinue -Verbose
-            Uninstall-Module -Name AzureStack -Force -ErrorAction SilentlyContinue -Verbose
             Get-Module -Name Azs.* -ListAvailable | Uninstall-Module -Force -ErrorAction SilentlyContinue -Verbose
-            if ($psRepository) {
-                Get-PSRepository -Name "PSGallery" | Unregister-PSRepository -ErrorAction SilentlyContinue
+            Get-Module -Name Azure* -ListAvailable | Uninstall-Module -Force -ErrorAction SilentlyContinue -Verbose
+            if (!(Get-PSRepository -ErrorAction SilentlyContinue | Where-Object {($_.Name -eq "$psRepositoryName") -and ($_.InstallationPolicy -eq "$psRepositoryInstallPolicy") -and ($_.SourceLocation -eq "$psRepositorySourceLocation")})) {
+                Get-PSRepository | Where-Object {($_.Name -ne "$psRepositoryName") -and ($_.InstallationPolicy -ne "$psRepositoryInstallPolicy") -and ($_.SourceLocation -ne "$psRepositorySourceLocation")} | Unregister-PSRepository -ErrorAction SilentlyContinue
             }
             Get-ChildItem -Path $Env:ProgramFiles\WindowsPowerShell\Modules\Azure* -ErrorAction SilentlyContinue | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
             Get-ChildItem -Path $Env:ProgramFiles\WindowsPowerShell\Modules\Azs* -ErrorAction SilentlyContinue | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
@@ -1379,7 +1431,13 @@ if (($progressCheck -eq "Incomplete") -or ($progressCheck -eq "Failed")) {
             Get-PSRepository -Name "PSGallery"
             Install-Module -Name AzureRm.BootStrapper -Force -ErrorAction Stop
             Use-AzureRmProfile -Profile 2018-03-01-hybrid -Force -ErrorAction Stop
-            Install-Module -Name AzureStack -RequiredVersion 1.5.0 -Force -ErrorAction Stop
+            Install-Module -Name AzureStack -RequiredVersion 1.6.0 -Force -ErrorAction Stop
+            # Install the Azure.Storage module version 4.5.0
+            Install-Module -Name Azure.Storage -RequiredVersion 4.5.0 -Force -AllowClobber -Verbose
+            # Install the AzureRm.Storage module version 5.0.4
+            Install-Module -Name AzureRM.Storage -RequiredVersion 5.0.4 -Force -AllowClobber -Verbose
+            # Remove incompatible storage module installed by AzureRM.Storage
+            Uninstall-Module Azure.Storage -RequiredVersion 4.6.1 -Force -Verbose
         }
         elseif ($deploymentMode -ne "Online") {
             $SourceLocation = "$downloadPath\ASDK\PowerShell"
@@ -1388,8 +1446,11 @@ if (($progressCheck -eq "Incomplete") -or ($progressCheck -eq "Failed")) {
                 Register-PSRepository -Name $RepoName -SourceLocation $SourceLocation -InstallationPolicy Trusted
             }
             # If this is a PartialOnline or Offline deployment, pull from the extracted zip file
-            Install-Module AzureRM -Repository $RepoName -Force -ErrorAction Stop
-            Install-Module AzureStack -Repository $RepoName -Force -ErrorAction Stop
+            Install-Module AzureRM -Repository $RepoName -Force -AllowClobber -ErrorAction Stop -Verbose
+            Install-Module AzureStack -Repository $RepoName -Force -AllowClobber -ErrorAction Stop -Verbose
+            Install-Module Azure.Storage -Repository $RepoName -RequiredVersion 4.5.0 -Force -AllowClobber -ErrorAction Stop -Verbose
+            Install-Module AzureRM.Storage -Repository $RepoName -RequiredVersion 5.0.4 -Force -AllowClobber -ErrorAction Stop -Verbose
+            Uninstall-Module Azure.Storage -RequiredVersion 4.6.1 -Force -Verbose
         }
         StageComplete -progressStage $progressStage
     }
@@ -1403,15 +1464,17 @@ elseif ($progressCheck -eq "Complete") {
     Write-CustomVerbose -Message "ASDK Configurator Stage: $progressStage previously completed successfully"
 }
 
+# Load the Storage PowerShell modules explicitly specifying the versions
+Import-Module -Name Azure.Storage -RequiredVersion 4.5.0 -Verbose
+Import-Module -Name AzureRM.Storage -RequiredVersion 5.0.4 -Verbose
+
 ### TEST ALL LOGINS #########################################################################################################################################
 #############################################################################################################################################################
 
 $scriptStep = "TEST LOGINS"
 # Register an AzureRM environment that targets your administrative Azure Stack instance
 Write-CustomVerbose -Message "ASDK Configurator will now test all logins"
-$ArmEndpoint = "https://adminmanagement.$regionName.$externalDomainSuffix"
-$MgmtEndpoint = "https://management.$regionName.$externalDomainSuffix"
-
+$ArmEndpoint = "https://adminmanagement.local.azurestack.external"
 Add-AzureRMEnvironment -Name "AzureStackAdmin" -ArmEndpoint "$ArmEndpoint" -ErrorAction Stop
 $ADauth = (Get-AzureRmEnvironment -Name "AzureStackAdmin").ActiveDirectoryAuthority.TrimEnd('/')
 
@@ -1429,7 +1492,7 @@ if ($authenticationType.ToString() -like "AzureAd") {
         ### TEST AZURE STACK LOGIN - Login to Azure Stack
         Write-CustomVerbose -Message "Testing Azure Stack login with Azure Active Directory"
         Write-CustomVerbose -Message "Logging into the Default Provider Subscription with your Azure Stack Administrator Account used with Azure Active Directory"
-        $ArmEndpoint = "https://adminmanagement.$regionName.$externalDomainSuffix"
+        $ArmEndpoint = "https://adminmanagement.local.azurestack.external"
         Add-AzureRMEnvironment -Name "AzureStackAdmin" -ArmEndpoint "$ArmEndpoint" -ErrorAction Stop
         $testAzureSub = Add-AzureRmAccount -EnvironmentName "AzureStackAdmin" -TenantId $tenantID -Subscription "Default Provider Subscription" -Credential $asdkCreds -ErrorAction Stop
         $testAzureSub = $testAzureSub | Out-String
@@ -1450,7 +1513,7 @@ elseif ($authenticationType.ToString() -like "ADFS") {
         Write-CustomVerbose -Message "Getting Tenant ID for Login to Azure Stack"
         $tenantId = (invoke-restmethod "$($ADauth)/.well-known/openid-configuration").issuer.TrimEnd('/').Split('/')[-1]
         Write-CustomVerbose -Message "Logging in with your Azure Stack Administrator Account used with ADFS"
-        $ArmEndpoint = "https://adminmanagement.$regionName.$externalDomainSuffix"
+        $ArmEndpoint = "https://adminmanagement.local.azurestack.external"
         Add-AzureRMEnvironment -Name "AzureStackAdmin" -ArmEndpoint "$ArmEndpoint" -ErrorAction Stop
         $testAzureSub = Add-AzureRmAccount -EnvironmentName "AzureStackAdmin" -TenantId $tenantID -Subscription "Default Provider Subscription" -Credential $asdkCreds -ErrorAction Stop
         $testAzureSub = $testAzureSub | Out-String
@@ -1620,7 +1683,7 @@ if ($registerASDK -and ($deploymentMode -ne "Offline")) {
         try {
             Write-CustomVerbose -Message "Starting Azure Stack registration to Azure"
             # Add the Azure cloud subscription environment name. Supported environment names are AzureCloud or, if using a China Azure Subscription, AzureChinaCloud.
-            $ArmEndpoint = "https://adminmanagement.$regionName.$externalDomainSuffix"
+            $ArmEndpoint = "https://adminmanagement.local.azurestack.external"
             Add-AzureRMEnvironment -Name "AzureStackAdmin" -ArmEndpoint "$ArmEndpoint" -ErrorAction Stop
             $ADauth = (Get-AzureRmEnvironment -Name "AzureStackAdmin").ActiveDirectoryAuthority.TrimEnd('/')
             $tenantId = (Invoke-RestMethod "$($ADauth)/$($azureDirectoryTenantName)/.well-known/openid-configuration").issuer.TrimEnd('/').Split('/')[-1]
@@ -1632,7 +1695,29 @@ if ($registerASDK -and ($deploymentMode -ne "Offline")) {
             Import-Module $modulePath\Registration\RegisterWithAzure.psm1 -Force -Verbose
             #Register Azure Stack
             $asdkHostName = ($env:computername).ToLower()
-            Set-AzsRegistration -PrivilegedEndpointCredential $cloudAdminCreds -PrivilegedEndpoint AzS-ERCS01 -RegistrationName "asdkreg-$asdkHostName-$runTime" -BillingModel Development -ErrorAction Stop
+            $asdkRegName = "asdkreg-$asdkHostName-$runTime"
+            Set-AzsRegistration -PrivilegedEndpointCredential $cloudAdminCreds -PrivilegedEndpoint AzS-ERCS01 -RegistrationName "$asdkRegName" -BillingModel Development -ErrorAction Stop
+            # Create Cleanup Doc - First Create File
+            $CleanUpRegPS1Path = "$downloadPath\ASDKRegCleanUp.ps1"
+            Remove-Item -Path $CleanUpRegPS1Path -Confirm:$false -Force -ErrorAction SilentlyContinue -Verbose
+            New-Item "$CleanUpRegPS1Path" -ItemType file -Force
+            # Populate file with key parameters
+            Write-Output "# This script should be used to remove a registration resource from Azure, prior to redeploying your ASDK on this hardware`n" -Verbose -ErrorAction Stop | Out-File -FilePath "$CleanUpRegPS1Path" -Force -Verbose -Append
+            Write-Output "# Populate key parameters" -Verbose -ErrorAction Stop | Out-File -FilePath "$CleanUpRegPS1Path" -Force -Verbose -Append
+            Write-Output "`$modulePath = `"$modulePath`"" -Verbose -ErrorAction Stop | Out-File -FilePath "$CleanUpRegPS1Path" -Force -Verbose -Append
+            Write-Output 'Import-Module "$modulePath\Registration\RegisterWithAzure.psm1" -Force -Verbose' -Verbose -ErrorAction Stop | Out-File -FilePath "$CleanUpRegPS1Path" -Force -Verbose -Append
+            Write-Output "`$asdkRegName = `"$asdkRegName`"" -Verbose -ErrorAction Stop | Out-File -FilePath "$CleanUpRegPS1Path" -Force -Verbose -Append
+            # Populate AAD Registration Information
+            Write-Output "`n# Populate AAD Registration Information" -Verbose -ErrorAction Stop | Out-File -FilePath "$CleanUpRegPS1Path" -Force -Verbose -Append
+            $azureUsername = $azureRegCreds.Username
+            Write-Output "`$azureRegCreds = Get-Credential -UserName `"$azureUsername`" -Message `"Enter the credentials you used to register this ASDK for username:$azureUsername.`"" -Verbose -ErrorAction Stop | Out-File -FilePath "$CleanUpRegPS1Path" -Force -Verbose -Append
+            Write-Output "`$azureRegSubId = `"$azureRegSubId`"" -Verbose -ErrorAction Stop | Out-File -FilePath "$CleanUpRegPS1Path" -Force -Verbose -Append
+            Write-Output "`$azureRegSub = Add-AzureRmAccount -EnvironmentName `"AzureCloud`" -SubscriptionId `"$azureRegSubId`" -Credential `$azureRegCreds" -ErrorAction Stop | Out-File -FilePath "$CleanUpRegPS1Path" -Force -Verbose -Append
+            # Get ASDK Privileged Endpoint Creds
+            Write-Output "`n# Get ASDK Privileged Endpoint Creds" -Verbose -ErrorAction Stop | Out-File -FilePath "$CleanUpRegPS1Path" -Force -Verbose -Append
+            Write-Output '$cloudAdminCreds = Get-Credential -UserName "azurestack\cloudadmin" -Message "Enter the credentials to access the privileged endpoint."' -Verbose -ErrorAction Stop | Out-File -FilePath "$CleanUpRegPS1Path" -Force -Verbose -Append
+            # Perform Removal
+            Write-Output 'Remove-AzsRegistration -PrivilegedEndpoint "Azs-ERCS01" -PrivilegedEndpointCredential $cloudAdminCreds -RegistrationName "$asdkRegName"' -Verbose -ErrorAction Stop | Out-File -FilePath "$CleanUpRegPS1Path" -Force -Verbose -Append
             StageComplete -progressStage $progressStage
         }
         catch {
@@ -1661,7 +1746,7 @@ if ($authenticationType.ToString() -like "AzureAd") {
     Write-CustomVerbose -Message "Logging into the Default Provider Subscription with your Azure Stack Administrator Account used with Azure Active Directory"
     $ADauth = (Get-AzureRmEnvironment -Name "AzureStackAdmin").ActiveDirectoryAuthority.TrimEnd('/')
     $tenantId = (Invoke-RestMethod "$($ADauth)/$($azureDirectoryTenantName)/.well-known/openid-configuration").issuer.TrimEnd('/').Split('/')[-1]
-    $ArmEndpoint = "https://adminmanagement.$regionName.$externalDomainSuffix"
+    $ArmEndpoint = "https://adminmanagement.local.azurestack.external"
     Add-AzureRMEnvironment -Name "AzureStackAdmin" -ArmEndpoint "$ArmEndpoint" -ErrorAction Stop
     Add-AzureRmAccount -EnvironmentName "AzureStackAdmin" -TenantId $tenantID -Subscription "Default Provider Subscription" -Credential $asdkCreds -ErrorAction Stop
 }
@@ -1671,7 +1756,7 @@ elseif ($authenticationType.ToString() -like "ADFS") {
     $ADauth = (Get-AzureRmEnvironment -Name "AzureStackAdmin").ActiveDirectoryAuthority.TrimEnd('/')
     $tenantId = (Invoke-RestMethod "$($ADauth)/.well-known/openid-configuration").issuer.TrimEnd('/').Split('/')[-1]
     Write-CustomVerbose -Message "Logging in with your Azure Stack Administrator Account used with ADFS"
-    $ArmEndpoint = "https://adminmanagement.$regionName.$externalDomainSuffix"
+    $ArmEndpoint = "https://adminmanagement.local.azurestack.external"
     Add-AzureRMEnvironment -Name "AzureStackAdmin" -ArmEndpoint "$ArmEndpoint" -ErrorAction Stop
     Add-AzureRmAccount -EnvironmentName "AzureStackAdmin" -TenantId $tenantID -Subscription "Default Provider Subscription" -Credential $asdkCreds -ErrorAction Stop
 }
@@ -1681,6 +1766,40 @@ else {
 
 # Get Azure Stack location
 $azsLocation = (Get-AzsLocation).Name
+
+### SCRIPT CHECK #############################################################################################################################################
+##############################################################################################################################################################
+
+try {
+    $scriptPath = [System.IO.Directory]::Exists("$ScriptLocation\Scripts")
+    if ($scriptPath -eq $true) {
+        $scriptPath = "$ScriptLocation\Scripts"
+        $scriptArray = @()
+        $scriptArray.Clear()
+        $scriptArray = "AddAppServicePreReqs.ps1", "AddDBHosting.ps1", "AddDBSkuQuota.ps1", "AddGalleryItems.ps1", "AddImage.ps1", "AddVMExtensions.ps1", `
+            "DeployAppService.ps1", "DeployDBRP.ps1", "DeployVM.ps1", "DownloadAppService.ps1", "DownloadWinUpdates.ps1", "GetJobStatus.ps1", "UploadScripts.ps1"
+        foreach ($script in $scriptArray) {
+            $testScript = [System.IO.File]::Exists("$scriptPath\$script")
+            if ($testScript -eq $false) {
+                throw "Didn't find $script within the $scriptPath folder. If this is a rerun, ensure your ConfigASDK.ps1 file is located in the same location as the first run, for example, if your ConfigASDK.ps1 file is located at `
+C:\ConfigASDK\ConfigASDK.ps1, you should find the Scripts folder located at C:\ConfigASDK\Scripts. Moving your ConfigASDK.ps1 file to another folder for a rerun will likely cause the script to fail, unless you also move your Scripts folder."
+                return
+            }
+            else {
+                Write-Host "$script located at $scriptPath\$script"
+            }
+        }
+    }
+    elseif ($scriptPath -eq $false) {
+        throw "Didn't find the Scripts folder located with your ConfigASDK.ps1 file. If this is a rerun, ensure your ConfigASDK.ps1 file is located in the same location as the first run, for example, if your ConfigASDK.ps1 file is located at `
+C:\ConfigASDK\ConfigASDK.ps1, you should find the Scripts folder located at C:\ConfigASDK\Scripts. Moving your ConfigASDK.ps1 file to another folder for a rerun will likely cause the script to fail, unless you also move your Scripts folder."
+        return
+    }
+}
+catch {
+    throw $_.Exception.Message
+    return
+}
 
 ### ADD VM IMAGES - JOB SETUP ################################################################################################################################
 ##############################################################################################################################################################
@@ -1723,14 +1842,12 @@ elseif ($freeCSVSpace -ge 115) {
 $jobName = "AddUbuntuImage"
 $AddUbuntuImage = {
     Start-Job -Name AddUbuntuImage -InitializationScript $export_functions -ArgumentList $ISOpath, $ASDKpath, $azsLocation, $registerASDK, $deploymentMode, $modulePath, `
-        $azureRegSubId, $azureRegTenantID, $tenantID, $azureRegCreds, $asdkCreds, $ScriptLocation, $branch, $sqlServerInstance, $databaseName, $tableName, $regionName, `
-        $externalDomainSuffix, $gitHubAccount -ScriptBlock {
+        $azureRegSubId, $azureRegTenantID, $tenantID, $azureRegCreds, $asdkCreds, $ScriptLocation, $branch, $sqlServerInstance, $databaseName, $tableName -ScriptBlock {
         Set-Location $Using:ScriptLocation; .\Scripts\AddImage.ps1 -ASDKpath $Using:ASDKpath `
             -azsLocation $Using:azsLocation -registerASDK $Using:registerASDK -deploymentMode $Using:deploymentMode -modulePath $Using:modulePath `
             -azureRegSubId $Using:azureRegSubId -azureRegTenantID $Using:azureRegTenantID -tenantID $Using:TenantID -azureRegCreds $Using:azureRegCreds `
             -asdkCreds $Using:asdkCreds -ScriptLocation $Using:ScriptLocation -ISOpath $Using:ISOpath -image "UbuntuServer" -branch $Using:branch -runMode $Using:runMode `
-            -sqlServerInstance $Using:sqlServerInstance -databaseName $Using:databaseName -tableName $Using:tableName `
-            -regionName $Using:regionName -externalDomainSuffix $Using:externalDomainSuffix -gitHubAccount $Using:gitHubAccount
+            -sqlServerInstance $Using:sqlServerInstance -databaseName $Using:databaseName -tableName $Using:tableName
     } -Verbose -ErrorAction Stop
 }
 JobLauncher -jobName $jobName -jobToExecute $AddUbuntuImage -Verbose
@@ -1738,46 +1855,40 @@ JobLauncher -jobName $jobName -jobToExecute $AddUbuntuImage -Verbose
 $jobName = "DownloadWindowsUpdates"
 $DownloadWindowsUpdates = {
     Start-Job -Name DownloadWindowsUpdates -InitializationScript $export_functions -ArgumentList $ISOpath, $ASDKpath, $azsLocation, `
-        $deploymentMode, $tenantID, $asdkCreds, $ScriptLocation, $sqlServerInstance, $databaseName, $tableName, $regionName, `
-        $externalDomainSuffix  -ScriptBlock {
+        $deploymentMode, $tenantID, $asdkCreds, $ScriptLocation, $sqlServerInstance, $databaseName, $tableName -ScriptBlock {
         Set-Location $Using:ScriptLocation; .\Scripts\DownloadWinUpdates.ps1 -ISOpath $Using:ISOpath -ASDKpath $Using:ASDKpath `
             -azsLocation $Using:azsLocation -deploymentMode $Using:deploymentMode -tenantID $Using:TenantID -asdkCreds $Using:asdkCreds `
-            -sqlServerInstance $Using:sqlServerInstance -databaseName $Using:databaseName -tableName $Using:tableName -ScriptLocation $Using:ScriptLocation `
-            -regionName $Using:regionName -externalDomainSuffix $Using:externalDomainSuffix
+            -sqlServerInstance $Using:sqlServerInstance -databaseName $Using:databaseName -tableName $Using:tableName -ScriptLocation $Using:ScriptLocation
     } -Verbose -ErrorAction Stop
 }
 JobLauncher -jobName $jobName -jobToExecute $DownloadWindowsUpdates -Verbose
 
-$jobName = "AddServerCore2016Image"
-$AddServerCore2016Image = {
-    Start-Job -Name AddServerCore2016Image -InitializationScript $export_functions -ArgumentList $ASDKpath, $azsLocation, $registerASDK, $deploymentMode, `
-        $modulePath, $azureRegSubId, $azureRegTenantID, $tenantID, $azureRegCreds, $asdkCreds, $ScriptLocation, $runMode, $ISOpath, $ISOPath2019, $branch, `
-        $sqlServerInstance, $databaseName, $tableName, $regionName, ` 
-        $externalDomainSuffix, $gitHubAccount -ScriptBlock {
+$jobName = "AddServerCoreImage"
+$AddServerCoreImage = {
+    Start-Job -Name AddServerCoreImage -InitializationScript $export_functions -ArgumentList $ASDKpath, $azsLocation, $registerASDK, $deploymentMode, `
+        $modulePath, $azureRegSubId, $azureRegTenantID, $tenantID, $azureRegCreds, $asdkCreds, $ScriptLocation, $runMode, $ISOpath, $branch, `
+        $sqlServerInstance, $databaseName, $tableName -ScriptBlock {
         Set-Location $Using:ScriptLocation; .\Scripts\AddImage.ps1 -ASDKpath $Using:ASDKpath -azsLocation $Using:azsLocation -registerASDK $Using:registerASDK `
             -deploymentMode $Using:deploymentMode -modulePath $Using:modulePath -azureRegSubId $Using:azureRegSubId -azureRegTenantID $Using:azureRegTenantID `
             -tenantID $Using:TenantID -azureRegCreds $Using:azureRegCreds -asdkCreds $Using:asdkCreds -ScriptLocation $Using:ScriptLocation -ISOpath $Using:ISOpath `
-            -image "ServerCore2016" -branch $Using:branch -sqlServerInstance $Using:sqlServerInstance -databaseName $Using:databaseName -tableName $Using:tableName -runMode $Using:runMode `
-            -regionName $Using:regionName -externalDomainSuffix $Using:externalDomainSuffix -gitHubAccount $Using:gitHubAccount
+            -image "ServerCore" -branch $Using:branch -sqlServerInstance $Using:sqlServerInstance -databaseName $Using:databaseName -tableName $Using:tableName -runMode $Using:runMode
     } -Verbose -ErrorAction Stop
 }
-JobLauncher -jobName $jobName -jobToExecute $AddServerCore2016Image -Verbose
+JobLauncher -jobName $jobName -jobToExecute $AddServerCoreImage -Verbose
 
-$jobName = "AddServerFull2016Image"
-$AddServerFull2016Image = {
-    Start-Job -Name AddServerFull2016Image -InitializationScript $export_functions -ArgumentList $ASDKpath, $azsLocation, `
+$jobName = "AddServerFullImage"
+$AddServerFullImage = {
+    Start-Job -Name AddServerFullImage -InitializationScript $export_functions -ArgumentList $ASDKpath, $azsLocation, `
         $registerASDK, $deploymentMode, $modulePath, $azureRegSubId, $azureRegTenantID, $tenantID, $azureRegCreds, $asdkCreds, $ScriptLocation, `
-        $runMode, $ISOpath, $ISOPath2019, $branch, $sqlServerInstance, $databaseName, $tableName, $regionName, ` 
-        $externalDomainSuffix, $gitHubAccount -ScriptBlock {
+        $runMode, $ISOpath, $branch, $sqlServerInstance, $databaseName, $tableName -ScriptBlock {
         Set-Location $Using:ScriptLocation; .\Scripts\AddImage.ps1 -ASDKpath $Using:ASDKpath `
             -azsLocation $Using:azsLocation -registerASDK $Using:registerASDK -deploymentMode $Using:deploymentMode -modulePath $Using:modulePath `
             -azureRegSubId $Using:azureRegSubId -azureRegTenantID $Using:azureRegTenantID -tenantID $Using:TenantID -azureRegCreds $Using:azureRegCreds `
-            -asdkCreds $Using:asdkCreds -ScriptLocation $Using:ScriptLocation -ISOpath $Using:ISOpath -image "ServerFull2016" -branch $Using:branch `
-            -sqlServerInstance $Using:sqlServerInstance -databaseName $Using:databaseName -tableName $Using:tableName -runMode $Using:runMode `
-            -regionName $Using:regionName -externalDomainSuffix $Using:externalDomainSuffix -gitHubAccount $Using:gitHubAccount
+            -asdkCreds $Using:asdkCreds -ScriptLocation $Using:ScriptLocation -ISOpath $Using:ISOpath -image "ServerFull" -branch $Using:branch `
+            -sqlServerInstance $Using:sqlServerInstance -databaseName $Using:databaseName -tableName $Using:tableName -runMode $Using:runMode
     } -Verbose -ErrorAction Stop
 }
-JobLauncher -jobName $jobName -jobToExecute $AddServerFull2016Image -Verbose
+JobLauncher -jobName $jobName -jobToExecute $AddServerFullImage -Verbose
 
 ### ADD DB GALLERY ITEMS - JOB SETUP #########################################################################################################################
 ##############################################################################################################################################################
@@ -1789,8 +1900,7 @@ $AddMySQLAzpkg = {
         $branch, $sqlServerInstance, $databaseName, $tableName -ScriptBlock {
         Set-Location $Using:ScriptLocation; .\Scripts\AddGalleryItems.ps1 -ASDKpath $Using:ASDKpath -azsLocation $Using:azsLocation `
             -deploymentMode $Using:deploymentMode -tenantID $Using:TenantID -asdkCreds $Using:asdkCreds -ScriptLocation $Using:ScriptLocation -branch $Using:branch `
-            -azpkg "MySQL" -sqlServerInstance $Using:sqlServerInstance -databaseName $Using:databaseName -tableName $Using:tableName `
-			-regionName $Using:regionName -externalDomainSuffix $Using:externalDomainSuffix -gitHubAccount $Using:gitHubAccount
+            -azpkg "MySQL" -sqlServerInstance $Using:sqlServerInstance -databaseName $Using:databaseName -tableName $Using:tableName
     } -Verbose -ErrorAction Stop
 }
 JobLauncher -jobName $jobName -jobToExecute $AddMySQLAzpkg -Verbose
@@ -1801,8 +1911,7 @@ $AddSQLServerAzpkg = {
         $branch, $sqlServerInstance, $databaseName, $tableName -ScriptBlock {
         Set-Location $Using:ScriptLocation; .\Scripts\AddGalleryItems.ps1 -ASDKpath $Using:ASDKpath -azsLocation $Using:azsLocation `
             -deploymentMode $Using:deploymentMode -tenantID $Using:TenantID -asdkCreds $Using:asdkCreds -ScriptLocation $Using:ScriptLocation -branch $Using:branch `
-            -azpkg "SQLServer" -sqlServerInstance $Using:sqlServerInstance -databaseName $Using:databaseName -tableName $Using:tableName `
-			-regionName $Using:regionName -externalDomainSuffix $Using:externalDomainSuffix -gitHubAccount $Using:gitHubAccount
+            -azpkg "SQLServer" -sqlServerInstance $Using:sqlServerInstance -databaseName $Using:databaseName -tableName $Using:tableName
     } -Verbose -ErrorAction Stop
 }
 JobLauncher -jobName $jobName -jobToExecute $AddSQLServerAzpkg -Verbose
@@ -1816,8 +1925,7 @@ $AddVMExtensions = {
         $sqlServerInstance, $databaseName, $tableName -ScriptBlock {
         Set-Location $Using:ScriptLocation; .\Scripts\AddVMExtensions.ps1 -deploymentMode $Using:deploymentMode -tenantID $Using:TenantID -asdkCreds $Using:asdkCreds `
             -ScriptLocation $Using:ScriptLocation -registerASDK $Using:registerASDK -sqlServerInstance $Using:sqlServerInstance -databaseName $Using:databaseName `
-            -tableName $Using:tableName `
-            -regionName $Using:regionName -externalDomainSuffix $Using:externalDomainSuffix
+            -tableName $Using:tableName
     } -Verbose -ErrorAction Stop
 }
 JobLauncher -jobName $jobName -jobToExecute $AddVMExtensions -Verbose
@@ -1827,24 +1935,24 @@ JobLauncher -jobName $jobName -jobToExecute $AddVMExtensions -Verbose
 
 $jobName = "AddMySQLRP"
 $AddMySQLRP = {
-    Start-Job -Name AddMySQLRP -InitializationScript $export_functions -ArgumentList $ASDKpath, $secureVMpwd, $deploymentMode, `
+    Start-Job -Name AddMySQLRP -InitializationScript $export_functions -ArgumentList $ASDKpath, $secureVMpwd, $deploymentMode, $serialMode, `
         $tenantID, $asdkCreds, $ScriptLocation, $skipMySQL, $skipMSSQL, $ERCSip, $cloudAdminCreds, $sqlServerInstance, $databaseName, $tableName -ScriptBlock {
         Set-Location $Using:ScriptLocation; .\Scripts\DeployDBRP.ps1 -ASDKpath $Using:ASDKpath -deploymentMode $Using:deploymentMode -tenantID $Using:TenantID `
             -asdkCreds $Using:asdkCreds -ScriptLocation $Using:ScriptLocation -dbrp "MySQL" -ERCSip $Using:ERCSip -cloudAdminCreds $Using:cloudAdminCreds `
             -skipMySQL $Using:skipMySQL -skipMSSQL $Using:skipMSSQL -secureVMpwd $Using:secureVMpwd -sqlServerInstance $Using:sqlServerInstance `
-            -databaseName $Using:databaseName -tableName $Using:tableName
+            -databaseName $Using:databaseName -tableName $Using:tableName -serialMode $Using:serialMode
     } -Verbose -ErrorAction Stop
 }
 JobLauncher -jobName $jobName -jobToExecute $AddMySQLRP -Verbose
 
 $jobName = "AddSQLServerRP"
 $AddSQLServerRP = {
-    Start-Job -Name AddSQLServerRP -InitializationScript $export_functions -ArgumentList $ASDKpath, $secureVMpwd, $deploymentMode, `
+    Start-Job -Name AddSQLServerRP -InitializationScript $export_functions -ArgumentList $ASDKpath, $secureVMpwd, $deploymentMode, $serialMode, `
         $tenantID, $asdkCreds, $ScriptLocation, $skipMySQL, $skipMSSQL, $ERCSip, $cloudAdminCreds, $sqlServerInstance, $databaseName, $tableName -ScriptBlock {
         Set-Location $Using:ScriptLocation; .\Scripts\DeployDBRP.ps1 -ASDKpath $Using:ASDKpath -deploymentMode $Using:deploymentMode -tenantID $Using:TenantID `
             -asdkCreds $Using:asdkCreds -ScriptLocation $Using:ScriptLocation -dbrp "SQLServer" -ERCSip $Using:ERCSip -cloudAdminCreds $Using:cloudAdminCreds `
             -skipMySQL $Using:skipMySQL -skipMSSQL $Using:skipMSSQL -secureVMpwd $Using:secureVMpwd -sqlServerInstance $Using:sqlServerInstance `
-            -databaseName $Using:databaseName -tableName $Using:tableName
+            -databaseName $Using:databaseName -tableName $Using:tableName -serialMode $Using:serialMode
     } -Verbose -ErrorAction Stop
 }
 JobLauncher -jobName $jobName -jobToExecute $AddSQLServerRP -Verbose
@@ -1883,8 +1991,7 @@ $UploadScripts = {
         $sqlServerInstance, $databaseName, $tableName -ScriptBlock {
         Set-Location $Using:ScriptLocation; .\Scripts\UploadScripts.ps1 -ASDKpath $Using:ASDKpath -tenantID $Using:TenantID -asdkCreds $Using:asdkCreds `
             -deploymentMode $Using:deploymentMode -azsLocation $Using:azsLocation -ScriptLocation $Using:ScriptLocation -sqlServerInstance $Using:sqlServerInstance `
-            -databaseName $Using:databaseName -tableName $Using:tableName `
-            -regionName $Using:regionName -externalDomainSuffix $Using:externalDomainSuffix
+            -databaseName $Using:databaseName -tableName $Using:tableName
     } -Verbose -ErrorAction Stop
 }
 JobLauncher -jobName $jobName -jobToExecute $UploadScripts -Verbose
@@ -1895,13 +2002,12 @@ JobLauncher -jobName $jobName -jobToExecute $UploadScripts -Verbose
 $jobName = "DeployMySQLHost"
 $DeployMySQLHost = {
     Start-Job -Name DeployMySQLHost -InitializationScript $export_functions -ArgumentList $ASDKpath, $downloadPath, $deploymentMode, $tenantID, $secureVMpwd, $VMpwd, `
-        $asdkCreds, $ScriptLocation, $azsLocation, $skipMySQL, $skipMSSQL, $skipAppService, $branch, $sqlServerInstance, $databaseName, $tableName -ScriptBlock {
+        $asdkCreds, $ScriptLocation, $azsLocation, $skipMySQL, $skipMSSQL, $skipAppService, $branch, $sqlServerInstance, $databaseName, $tableName, $serialMode -ScriptBlock {
         Set-Location $Using:ScriptLocation; .\Scripts\DeployVM.ps1 -ASDKpath $Using:ASDKpath `
             -downloadPath $Using:downloadPath -deploymentMode $Using:deploymentMode -vmType "MySQL" -tenantID $Using:TenantID `
             -secureVMpwd $Using:secureVMpwd -VMpwd $Using:VMpwd -asdkCreds $Using:asdkCreds -ScriptLocation $Using:ScriptLocation -azsLocation $Using:azsLocation `
             -skipMySQL $Using:skipMySQL -skipMSSQL $Using:skipMSSQL -skipAppService $Using:skipAppService -branch $Using:branch -sqlServerInstance $Using:sqlServerInstance `
-            -databaseName $Using:databaseName -tableName $Using:tableName `
-            -regionName $Using:regionName -externalDomainSuffix $Using:externalDomainSuffix -gitHubAccount $Using:gitHubAccount
+            -databaseName $Using:databaseName -tableName $Using:tableName -serialMode $Using:serialMode
     } -Verbose -ErrorAction Stop
 }
 JobLauncher -jobName $jobName -jobToExecute $DeployMySQLHost -Verbose
@@ -1909,12 +2015,11 @@ JobLauncher -jobName $jobName -jobToExecute $DeployMySQLHost -Verbose
 $jobName = "DeploySQLServerHost"
 $DeploySQLServerHost = {
     Start-Job -Name DeploySQLServerHost -InitializationScript $export_functions -ArgumentList $ASDKpath, $downloadPath, $deploymentMode, $tenantID, $secureVMpwd, $VMpwd, `
-        $asdkCreds, $ScriptLocation, $azsLocation, $skipMySQL, $skipMSSQL, $skipAppService, $branch, $sqlServerInstance, $databaseName, $tableName -ScriptBlock {
+        $asdkCreds, $ScriptLocation, $azsLocation, $skipMySQL, $skipMSSQL, $skipAppService, $branch, $sqlServerInstance, $databaseName, $tableName, $serialMode -ScriptBlock {
         Set-Location $Using:ScriptLocation; .\Scripts\DeployVM.ps1 -ASDKpath $Using:ASDKpath -downloadPath $Using:downloadPath -deploymentMode $Using:deploymentMode `
             -vmType "SQLServer" -tenantID $Using:TenantID -secureVMpwd $Using:secureVMpwd -VMpwd $Using:VMpwd -asdkCreds $Using:asdkCreds `
             -ScriptLocation $Using:ScriptLocation -azsLocation $Using:azsLocation -skipMySQL $Using:skipMySQL -skipMSSQL $Using:skipMSSQL `
-            -skipAppService $Using:skipAppService -branch $Using:branch -sqlServerInstance $Using:sqlServerInstance -databaseName $Using:databaseName -tableName $Using:tableName `
-            -regionName $Using:regionName -externalDomainSuffix $Using:externalDomainSuffix -gitHubAccount $Using:gitHubAccount
+            -skipAppService $Using:skipAppService -branch $Using:branch -sqlServerInstance $Using:sqlServerInstance -databaseName $Using:databaseName -tableName $Using:tableName -serialMode $Using:serialMode
     } -Verbose -ErrorAction Stop
 }
 JobLauncher -jobName $jobName -jobToExecute $DeploySQLServerHost -Verbose
@@ -1928,8 +2033,7 @@ $AddMySQLHosting = {
         $asdkCreds, $ScriptLocation, $skipMySQL, $skipMSSQL, $branch, $sqlServerInstance, $databaseName, $tableName -ScriptBlock {
         Set-Location $Using:ScriptLocation; .\Scripts\AddDBHosting.ps1 -ASDKpath $Using:ASDKpath -deploymentMode $Using:deploymentMode -dbHost "MySQL" `
             -tenantID $Using:TenantID -secureVMpwd $Using:secureVMpwd -asdkCreds $Using:asdkCreds -ScriptLocation $Using:ScriptLocation -skipMySQL $Using:skipMySQL `
-            -skipMSSQL $Using:skipMSSQL -branch $Using:branch -sqlServerInstance $Using:sqlServerInstance -databaseName $Using:databaseName -tableName $Using:tableName `
-			-gitHubAccount $Using:gitHubAccount
+            -skipMSSQL $Using:skipMSSQL -branch $Using:branch -sqlServerInstance $Using:sqlServerInstance -databaseName $Using:databaseName -tableName $Using:tableName
     } -Verbose -ErrorAction Stop
 }
 JobLauncher -jobName $jobName -jobToExecute $AddMySQLHosting -Verbose
@@ -1951,12 +2055,11 @@ JobLauncher -jobName $jobName -jobToExecute $AddSQLHosting -Verbose
 $jobName = "DeployAppServiceFS"
 $DeployAppServiceFS = {
     Start-Job -Name DeployAppServiceFS -InitializationScript $export_functions -ArgumentList $ASDKpath, $downloadPath, $deploymentMode, $tenantID, $secureVMpwd, $VMpwd, `
-        $asdkCreds, $ScriptLocation, $azsLocation, $skipMySQL, $skipMSSQL, $skipAppService, $branch, $sqlServerInstance, $databaseName, $tableName -ScriptBlock {
+        $asdkCreds, $ScriptLocation, $azsLocation, $skipMySQL, $skipMSSQL, $skipAppService, $branch, $sqlServerInstance, $databaseName, $tableName, $serialMode -ScriptBlock {
         Set-Location $Using:ScriptLocation; .\Scripts\DeployVM.ps1 -ASDKpath $Using:ASDKpath -downloadPath $Using:downloadPath -deploymentMode $Using:deploymentMode `
             -vmType "AppServiceFS" -tenantID $Using:TenantID -secureVMpwd $Using:secureVMpwd -VMpwd $Using:VMpwd -asdkCreds $Using:asdkCreds `
             -ScriptLocation $Using:ScriptLocation -azsLocation $Using:azsLocation -skipMySQL $Using:skipMySQL -skipMSSQL $Using:skipMSSQL -skipAppService $Using:skipAppService `
-            -branch $Using:branch -sqlServerInstance $Using:sqlServerInstance -databaseName $Using:databaseName -tableName $Using:tableName `
-            -regionName $Using:regionName -externalDomainSuffix $Using:externalDomainSuffix -gitHubAccount $Using:gitHubAccount
+            -branch $Using:branch -sqlServerInstance $Using:sqlServerInstance -databaseName $Using:databaseName -tableName $Using:tableName -serialMode $Using:serialMode
     } -Verbose -ErrorAction Stop
 }
 JobLauncher -jobName $jobName -jobToExecute $DeployAppServiceFS -Verbose
@@ -1964,12 +2067,11 @@ JobLauncher -jobName $jobName -jobToExecute $DeployAppServiceFS -Verbose
 $jobName = "DeployAppServiceDB"
 $DeployAppServiceDB = {
     Start-Job -Name DeployAppServiceDB -InitializationScript $export_functions -ArgumentList $ASDKpath, $downloadPath, $deploymentMode, $tenantID, $secureVMpwd, $VMpwd, `
-        $asdkCreds, $ScriptLocation, $azsLocation, $skipMySQL, $skipMSSQL, $skipAppService, $branch, $sqlServerInstance, $databaseName, $tableName -ScriptBlock {
+        $asdkCreds, $ScriptLocation, $azsLocation, $skipMySQL, $skipMSSQL, $skipAppService, $branch, $sqlServerInstance, $databaseName, $tableName, $serialMode -ScriptBlock {
         Set-Location $Using:ScriptLocation; .\Scripts\DeployVM.ps1 -ASDKpath $Using:ASDKpath -downloadPath $Using:downloadPath -deploymentMode $Using:deploymentMode `
             -vmType "AppServiceDB" -tenantID $Using:TenantID -secureVMpwd $Using:secureVMpwd -VMpwd $Using:VMpwd -asdkCreds $Using:asdkCreds `
             -ScriptLocation $Using:ScriptLocation -azsLocation $Using:azsLocation -skipMySQL $Using:skipMySQL -skipMSSQL $Using:skipMSSQL -skipAppService $Using:skipAppService `
-            -branch $Using:branch -sqlServerInstance $Using:sqlServerInstance -databaseName $Using:databaseName -tableName $Using:tableName `
-            -regionName $Using:regionName -externalDomainSuffix $Using:externalDomainSuffix -gitHubAccount $Using:gitHubAccount
+            -branch $Using:branch -sqlServerInstance $Using:sqlServerInstance -databaseName $Using:databaseName -tableName $Using:tableName -serialMode $Using:serialMode
     } -Verbose -ErrorAction Stop
 }
 JobLauncher -jobName $jobName -jobToExecute $DeployAppServiceDB -Verbose
@@ -1987,14 +2089,13 @@ JobLauncher -jobName $jobName -jobToExecute $DownloadAppService -Verbose
 $jobName = "AddAppServicePreReqs"
 $AddAppServicePreReqs = {
     Start-Job -Name AddAppServicePreReqs -InitializationScript $export_functions -ArgumentList $ASDKpath, $downloadPath, $deploymentMode, $authenticationType, `
-        $azureDirectoryTenantName, $tenantID, $secureVMpwd, $ERCSip, $asdkCreds, $cloudAdminCreds, $ScriptLocation, $skipAppService, `
+        $azureDirectoryTenantName, $tenantID, $secureVMpwd, $ERCSip, $branch, $asdkCreds, $cloudAdminCreds, $ScriptLocation, $skipAppService, `
         $sqlServerInstance, $databaseName, $tableName -ScriptBlock {
         Set-Location $Using:ScriptLocation; .\Scripts\AddAppServicePreReqs.ps1 -ASDKpath $Using:ASDKpath `
             -downloadPath $Using:downloadPath -deploymentMode $Using:deploymentMode -authenticationType $Using:authenticationType `
-            -azureDirectoryTenantName $Using:azureDirectoryTenantName -tenantID $Using:tenantID -secureVMpwd $Using:secureVMpwd -ERCSip $Using:ERCSip `
+            -azureDirectoryTenantName $Using:azureDirectoryTenantName -tenantID $Using:tenantID -secureVMpwd $Using:secureVMpwd -ERCSip $Using:ERCSip -branch $Using:branch `
             -asdkCreds $Using:asdkCreds -cloudAdminCreds $Using:cloudAdminCreds -ScriptLocation $Using:ScriptLocation -skipAppService $Using:skipAppService `
-            -sqlServerInstance $Using:sqlServerInstance -databaseName $Using:databaseName -tableName $Using:tableName `
-            -regionName $Using:regionName -externalDomainSuffix $Using:externalDomainSuffix -appServicesCertsFolder $Using:appServicesCertsFolder
+            -sqlServerInstance $Using:sqlServerInstance -databaseName $Using:databaseName -tableName $Using:tableName
     } -Verbose -ErrorAction Stop
 }
 JobLauncher -jobName $jobName -jobToExecute $AddAppServicePreReqs -Verbose
@@ -2006,8 +2107,7 @@ $DeployAppService = {
         Set-Location $Using:ScriptLocation; .\Scripts\DeployAppService.ps1 -ASDKpath $Using:ASDKpath -downloadPath $Using:downloadPath -deploymentMode $Using:deploymentMode `
             -authenticationType $Using:authenticationType -azureDirectoryTenantName $Using:azureDirectoryTenantName -tenantID $Using:tenantID -VMpwd $Using:VMpwd `
             -asdkCreds $Using:asdkCreds -ScriptLocation $Using:ScriptLocation -skipAppService $Using:skipAppService -branch $Using:branch `
-            -sqlServerInstance $Using:sqlServerInstance -databaseName $Using:databaseName -tableName $Using:tableName `
-            -regionName $Using:regionName -externalDomainSuffix $Using:externalDomainSuffix
+            -sqlServerInstance $Using:sqlServerInstance -databaseName $Using:databaseName -tableName $Using:tableName
     } -Verbose -ErrorAction Stop
 }
 JobLauncher -jobName $jobName -jobToExecute $DeployAppService -Verbose
@@ -2057,7 +2157,7 @@ if (($progressCheck -eq "Incomplete") -or ($progressCheck -eq "Failed")) {
         # Configure a simple base plan and offer for IaaS
         Get-AzureRmContext -ListAvailable | Where-Object {$_.Environment -like "Azure*"} | Remove-AzureRmAccount | Out-Null
         Clear-AzureRmContext -Scope CurrentUser -Force
-        $ArmEndpoint = "https://adminmanagement.$regionName.$externalDomainSuffix"
+        $ArmEndpoint = "https://adminmanagement.local.azurestack.external"
         Add-AzureRMEnvironment -Name "AzureStackAdmin" -ArmEndpoint "$ArmEndpoint" -ErrorAction Stop
         Add-AzureRmAccount -EnvironmentName "AzureStackAdmin" -TenantId $tenantID -Credential $asdkCreds -ErrorAction Stop | Out-Null
         $sub = Get-AzureRmSubscription | Where-Object {$_.Name -eq "Default Provider Subscription"}
@@ -2072,7 +2172,7 @@ if (($progressCheck -eq "Incomplete") -or ($progressCheck -eq "Failed")) {
         $computeParams = $null
         $computeParams = @{
             Name                 = "compute_default"
-            CoresLimit           = 200
+            CoresCount           = 200
             AvailabilitySetCount = 20
             VirtualMachineCount  = 100
             VmScaleSetCount      = 20
@@ -2156,15 +2256,16 @@ if (($progressCheck -eq "Incomplete") -or ($progressCheck -eq "Failed")) {
         Set-AzsOffer -Name $OfferName -DisplayName $OfferName -State Public -BasePlanIds $plan.Id -ResourceGroupName $RGName -Location $azsLocation
 
         # Create a new subscription for that offer, for the currently logged in user
-        $Offer = Get-AzsOffer | Where-Object name -eq "BaseOffer"
-        New-AzsSubscription  -OfferId $Offer.Id -DisplayName "ASDK Subscription"
+        $Offer = Get-AzsManagedOffer | Where-Object name -eq "BaseOffer"
+        $subUserName = (Get-AzureRmContext).Account.Id
+        New-AzsUserSubscription -Owner $subUserName -OfferId $Offer.Id -DisplayName "ASDK Subscription"
 
         # Log the user out of the "AzureStackAdmin" environment
         Get-AzureRmContext -ListAvailable | Where-Object {$_.Environment -like "Azure*"} | Remove-AzureRmAccount | Out-Null
         Clear-AzureRmContext -Scope CurrentUser -Force
 
         # Log the user into the "AzureStackUser" environment
-        Add-AzureRMEnvironment -Name "AzureStackUser" -ArmEndpoint "https://management.$regionName.$externalDomainSuffix"
+        Add-AzureRMEnvironment -Name "AzureStackUser" -ArmEndpoint "https://management.local.azurestack.external"
         Add-AzureRmAccount -EnvironmentName "AzureStackUser" -TenantId $tenantID -Credential $asdkCreds -ErrorAction Stop | Out-Null
 
         # Register all the RPs for that user
@@ -2335,7 +2436,7 @@ elseif (!$skipCustomizeHost -and ($progressCheck -ne "Complete")) {
                     $env:Path = [System.Environment]::GetEnvironmentVariable("Path", "Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path", "User") 
                     # Set up the VM alias Endpoint for Azure CLI & Python
                     if ($deploymentMode -eq "Online") {
-                        $vmAliasEndpoint = "https://raw.githubusercontent.com/$gitHubAccount/azurestack/$branch/deployment/packages/Aliases/aliases.json"
+                        $vmAliasEndpoint = "https://raw.githubusercontent.com/mattmcspirit/azurestack/$branch/deployment/packages/Aliases/aliases.json"
                     }
                     elseif (($deploymentMode -eq "PartialOnline") -or ($deploymentMode -eq "Offline")) {
                         $item = Get-ChildItem -Path "$ASDKpath\images" -Recurse -Include ("aliases.json") -ErrorAction Stop
@@ -2346,7 +2447,7 @@ elseif (!$skipCustomizeHost -and ($progressCheck -ne "Complete")) {
                             try {
                                 # Log back into Azure Stack to ensure login hasn't timed out
                                 Write-CustomVerbose -Message "$itemName not found. Upload Attempt: $uploadItemAttempt"
-                                $ArmEndpoint = "https://adminmanagement.$regionName.$externalDomainSuffix"
+                                $ArmEndpoint = "https://adminmanagement.local.azurestack.external"
                                 Add-AzureRMEnvironment -Name "AzureStackAdmin" -ArmEndpoint "$ArmEndpoint" -ErrorAction Stop
                                 Add-AzureRmAccount -EnvironmentName "AzureStackAdmin" -TenantId $tenantID -Credential $asdkCreds -ErrorAction Stop | Out-Null
                                 Set-AzureStorageBlobContent -File "$itemFullPath" -Container $asdkOfflineContainerName -Blob $itemName -Context $asdkOfflineStorageAccount.Context -ErrorAction Stop | Out-Null
@@ -2363,9 +2464,9 @@ elseif (!$skipCustomizeHost -and ($progressCheck -ne "Complete")) {
                     Write-CustomVerbose -Message "Configuring your Azure CLI environment on the ASDK host, for Admin and User"
                     # Register AZ CLI environment for Admin
                     Write-CustomVerbose -Message "Configuring for AzureStackAdmin"
-                    az cloud register -n AzureStackAdmin --endpoint-resource-manager $ArmEndpoint --suffix-storage-endpoint "$regionName.$externalDomainSuffix" --suffix-keyvault-dns ".adminvault.$regionName.$externalDomainSuffix" --endpoint-vm-image-alias-doc $vmAliasEndpoint
+                    az cloud register -n AzureStackAdmin --endpoint-resource-manager "https://adminmanagement.local.azurestack.external" --suffix-storage-endpoint "local.azurestack.external" --suffix-keyvault-dns ".adminvault.local.azurestack.external" --endpoint-vm-image-alias-doc $vmAliasEndpoint
                     Write-CustomVerbose -Message "Configuring for AzureStackUser"
-                    az cloud register -n AzureStackUser --endpoint-resource-manager $MgmtEndpoint --suffix-storage-endpoint "$regionName.$externalDomainSuffix" --suffix-keyvault-dns ".vault.$regionName.$externalDomainSuffix" --endpoint-vm-image-alias-doc $vmAliasEndpoint
+                    az cloud register -n AzureStackUser --endpoint-resource-manager "https://management.local.azurestack.external" --suffix-storage-endpoint "local.azurestack.external" --suffix-keyvault-dns ".vault.local.azurestack.external" --endpoint-vm-image-alias-doc $vmAliasEndpoint
                     Write-CustomVerbose -Message "Setting Azure CLI active environment to AzureStackAdmin"
                     # Set the active environment
                     az cloud set -n AzureStackAdmin
@@ -2440,7 +2541,7 @@ try {
         Write-Output "SQL Server Database Hosting VM Credentials = sqladmin | $VMpwd" >> $txtPath
     }
     if (!$skipAppService) {
-        $ArmEndpoint = "https://adminmanagement.$regionName.$externalDomainSuffix"
+        $ArmEndpoint = "https://adminmanagement.local.azurestack.external"
         Add-AzureRMEnvironment -Name "AzureStackAdmin" -ArmEndpoint "$ArmEndpoint" -ErrorAction Stop
         Add-AzureRmAccount -EnvironmentName "AzureStackAdmin" -TenantId $tenantID -Credential $asdkCreds -ErrorAction Stop | Out-Null
         $fileServerFqdn = (Get-AzureRmPublicIpAddress -Name "fileserver_ip" -ResourceGroupName "appservice-fileshare").DnsSettings.Fqdn
@@ -2455,23 +2556,23 @@ try {
         Write-Output "App Service SQL Server SA Credentials = sa | $VMpwd" >> $txtPath
         Write-Output "App Service Application Id: $identityApplicationID" >> $txtPath
         Write-Output "`r`nOther useful information for reference:" >> $txtPath
-        Write-Output "`r`nAzure Stack Admin ARM Endpoint: $ArmEndpoint" >> $txtPath
-        Write-Output "Azure Stack Tenant ARM Endpoint: $MgmtEndpoint" >> $txtPath
+        Write-Output "`r`nAzure Stack Admin ARM Endpoint: adminmanagement.local.azurestack.external" >> $txtPath
+        Write-Output "Azure Stack Tenant ARM Endpoint: management.local.azurestack.external" >> $txtPath
         Write-Output "Azure Directory Tenant Name: $azureDirectoryTenantName" >> $txtPath
-        Write-Output "File Share UNC Path: \\appservicefileshare.$regionName.cloudapp.$externalDomainSuffix\websites" >> $txtPath
+        Write-Output "File Share UNC Path: \\appservicefileshare.local.cloudapp.azurestack.external\websites" >> $txtPath
         Write-Output "File Share Owner: fileshareowner" >> $txtPath
         Write-Output "File Share Owner Password: $VMpwd" >> $txtPath
         Write-Output "File Share User: fileshareuser" >> $txtPath
         Write-Output "File Share User Password: $VMpwd" >> $txtPath
         Write-Output "Identity Application ID: $identityApplicationID" >> $txtPath
-        Write-Output "Identity Application Certificate file (*.pfx): $AppServicePath\sso.appservice.$regionName.$externalDomainSuffix.pfx" >> $txtPath
+        Write-Output "Identity Application Certificate file (*.pfx): $AppServicePath\sso.appservice.local.azurestack.external.pfx" >> $txtPath
         Write-Output "Identity Application Certificate (*.pfx) password: $VMpwd" >> $txtPath
         Write-Output "Azure Resource Manager (ARM) root certificate file (*.cer): $AppServicePath\AzureStackCertificationAuthority.cer" >> $txtPath
-        Write-Output "App Service default SSL certificate file (*.pfx): $AppServicePath\_.appservice.$regionName.$externalDomainSuffix.pfx" >> $txtPath
+        Write-Output "App Service default SSL certificate file (*.pfx): $AppServicePath\_.appservice.local.AzureStack.external.pfx" >> $txtPath
         Write-Output "App Service default SSL certificate (*.pfx) password: $VMpwd" >> $txtPath
-        Write-Output "App Service API SSL certificate file (*.pfx): $AppServicePath\api.appservice.$regionName.$externalDomainSuffix.pfx" >> $txtPath
+        Write-Output "App Service API SSL certificate file (*.pfx): $AppServicePath\api.appservice.local.AzureStack.external.pfx" >> $txtPath
         Write-Output "App Service API SSL certificate (*.pfx) password: $VMpwd" >> $txtPath
-        Write-Output "App Service Publisher SSL certificate file (*.pfx): $AppServicePath\ftp.appservice.$regionName.$externalDomainSuffix.pfx" >> $txtPath
+        Write-Output "App Service Publisher SSL certificate file (*.pfx): $AppServicePath\ftp.appservice.local.AzureStack.external.pfx" >> $txtPath
         Write-Output "App Service Publisher SSL certificate (*.pfx) password: $VMpwd" >> $txtPath
         Write-Output "SQL Server Name: $sqlAppServerFqdn" >> $txtPath
         Write-Output "SQL sysadmin login: sa" >> $txtPath
@@ -2510,8 +2611,8 @@ if ($scriptSuccess) {
     Write-CustomVerbose -Message "Congratulations - all steps completed successfully:`r`n"
     Read-SqlTableData -ServerInstance $sqlServerInstance -DatabaseName "$databaseName" -SchemaName "dbo" -TableName "$tableName" -ErrorAction Stop
 
-    if ([bool](Get-ChildItem -Path $downloadPath\* -Include "*.txt" -ErrorAction SilentlyContinue -Verbose)) {
-        # Move log files to Completed folder - first check for 'Completed' folder, and create if not existing
+    if ([bool](Get-ChildItem -Path $downloadPath\* -Include "*.txt", "*.ps1" -ErrorAction SilentlyContinue -Verbose)) {
+        # Move log files and cleanup files to Completed folder - first check for 'Completed' folder, and create if not existing
         if (!$([System.IO.Directory]::Exists("$downloadPath\Completed"))) {
             New-Item -Path "$downloadPath\Completed" -ItemType Directory -Force -ErrorAction SilentlyContinue -Verbose | Out-Null
         }
@@ -2519,7 +2620,7 @@ if ($scriptSuccess) {
         $completedPath = "$downloadPath\Completed\$runTime"
         New-Item -Path "$completedPath" -ItemType Directory -Force -ErrorAction SilentlyContinue -Verbose | Out-Null
         # Then move the files to this folder
-        Get-ChildItem -Path "$downloadPath\*" -Include "*.txt" -ErrorAction SilentlyContinue -Verbose | ForEach-Object { Copy-Item -Path $_ -Destination "$completedPath" -Force -ErrorAction SilentlyContinue -Verbose }
+        Get-ChildItem -Path "$downloadPath\*" -Include "*.txt", "*.ps1" -ErrorAction SilentlyContinue -Verbose | ForEach-Object { Copy-Item -Path $_ -Destination "$completedPath" -Force -ErrorAction SilentlyContinue -Verbose }
     }
 
     Write-CustomVerbose -Message "Retaining App Service Certs for potential App Service updates in the future"
@@ -2551,19 +2652,38 @@ if ($scriptSuccess) {
         $i++
     }
     Write-CustomVerbose -Message "Cleaning up Resource Group used for Image Upload"
-    $ArmEndpoint = "https://adminmanagement.$regionName.$externalDomainSuffix"
+    $ArmEndpoint = "https://adminmanagement.local.azurestack.external"
     Add-AzureRMEnvironment -Name "AzureStackAdmin" -ArmEndpoint "$ArmEndpoint" -ErrorAction Stop
     Add-AzureRmAccount -EnvironmentName "AzureStackAdmin" -TenantId $tenantID -Credential $asdkCreds -ErrorAction Stop | Out-Null
     $asdkImagesRGName = "azurestack-images"
     Get-AzureRmResourceGroup -Name $asdkImagesRGName -Location $azsLocation -ErrorAction SilentlyContinue | Remove-AzureRmResourceGroup -Force -ErrorAction SilentlyContinue
+
+    # Create desktop icons
+    $shortcut_name = "Azure Stack Admin Portal" 
+    $shortcut_target = "https://adminportal.local.azurestack.external" 
+    $sh = new-object -com "WScript.Shell" 
+    $p = $sh.SpecialFolders.item("AllUsersDesktop") 
+    $lnk = $sh.CreateShortcut( (join-path $p $shortcut_name) + ".lnk" ) 
+    $lnk.TargetPath = $shortcut_target 
+    $lnk.IconLocation = "$env:WINDIR\system32\imageres.dll,220"
+    $lnk.Save()
+    
+    $shortcut_name = "Azure Stack User Portal" 
+    $shortcut_target = "https://portal.local.azurestack.external" 
+    $sh = new-object -com "WScript.Shell" 
+    $p = $sh.SpecialFolders.item("AllUsersDesktop") 
+    $lnk = $sh.CreateShortcut( (join-path $p $shortcut_name) + ".lnk" ) 
+    $lnk.TargetPath = $shortcut_target 
+    $lnk.IconLocation = "$env:WINDIR\system32\imageres.dll,220"
+    $lnk.Save()
     
     # Increment run counter to track successful run
     [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
     try {Invoke-WebRequest "http://bit.ly/asdksuccessrun" -UseBasicParsing -DisableKeepAlive | Out-Null } catch {$_.Exception.Response.StatusCode.Value__}
 
     # Final Cleanup
-    while (Get-ChildItem -Path "$downloadPath\*" -Include "*.txt" -ErrorAction SilentlyContinue -Verbose) {
-        Get-ChildItem -Path "$downloadPath\*" -Include "*.txt" -ErrorAction SilentlyContinue -Verbose | Remove-Item -Force -Verbose -ErrorAction SilentlyContinue
+    while (Get-ChildItem -Path "$downloadPath\*" -Include "*.txt", "*.ps1" -ErrorAction SilentlyContinue -Verbose) {
+        Get-ChildItem -Path "$downloadPath\*" -Include "*.txt", "*.ps1" -ErrorAction SilentlyContinue -Verbose | Remove-Item -Force -Verbose -ErrorAction SilentlyContinue
     }
 
     # Take a copy of the log file at this point

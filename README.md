@@ -1,13 +1,13 @@
-Azure Stack Development Kit Configurator 1809.2
+Azure Stack Development Kit Configurator 1811.2
 ==============
 
 Version Compatibility
 -----------
 The current version of the ConfigASDK.ps1 script has been **tested with the following versions**:
-* ASDK build **1.1809.0.90 (1809)**
-* Azure Stack PowerShell Module **1.5.0**
+* ASDK build **1.1811.0.101 (1811)**
+* Azure Stack PowerShell Module **1.6.0**
 
-**IMPORTANT** - this version of the ConfigASDK.ps1 script has been tested with ASDK build 1809, Azure Stack PowerShell 1.5.0. and the new AzureRMProfile 2018-03-01-hybrid.  A version that supports the older ASDK builds (1803 etc) can be found in the archive folder, however this will not be maintained. You should upgrade to a later ASDK.
+**IMPORTANT** - this version of the ConfigASDK.ps1 script has been tested with ASDK build 1811, Azure Stack PowerShell 1.6.0. and the new AzureRMProfile 2018-03-01-hybrid.  A version that supports the older ASDK builds (1803 etc) can be found in the archive folder, however this will not be maintained. You should upgrade to a later ASDK.
 
 Description
 -----------
@@ -16,6 +16,7 @@ The purpose of this ConfigASDK.ps1 script is to automate as much as possible, th
 
 This includes:
 * Validates all input parameters
+* Checks ASDK host memory for enough resources
 * Installs Azure Stack PowerShell and AzureRM modules
 * Ensures password for VMs meets complexity required for App Service installation
 * Updated password expiration (180 days)
@@ -48,10 +49,11 @@ This includes:
 * Progress Tracking and rerun reliability with ConfigASDK database hosted on SqlLocalDB (2017)
 * Stores script output in a ConfigASDKOutput.txt, for future reference
 * Supports usage in offline/disconnected environments
+* New -serialMode which excecutes VM deployments in serial, rather than parallel - better for older hardware
 
 Additionally, if you encounter an issue, try re-running the script with the same command you used to run it previously. The script is written in such a way that it shouldn't try to rerun previously completed steps.
 
-New in 1809
+New in 1809 and newer
 -----------
 Through the use of parallel jobs, the 1809 version of the ConfigASDK brings significant under-the-hood improvements to make the running of the ConfigASDK script *much* faster. In addition, the management of the process now uses SqlLocalDB, which provides a better level of control and efficiency.
 
@@ -63,15 +65,19 @@ Firstly, **you must have already deployed the ASDK**. Secondly, for an **Azure A
 
 ASDK Host Sizing
 ------------
-The ASDK Configurator will deploy a total of 12 additional virtual machines to support the MySQL, SQL Server, and App Service Resource Providers, should you choose to deploy all the RPs.  You will therefore need an ASDK host machine that has enough free memory to support these additional virtual machines:
+The ASDK Configurator will deploy a total of 12 additional virtual machines to support the MySQL, SQL Server, and App Service Resource Providers, should you choose to deploy all the RPs.  You will therefore need an ASDK host machine that has at least 29.5GB free memory to support these additional virtual machines:
 
-* **MySQL RP** - 2 VMs (RP VM, DB Host VM) = **7GB**
-* **SQL Server RP** - 2 VMs (RP VM, DB Host VM) = **7GB**
-* **App Service** - 8 VMs (File Server, SQL Host, Front End Scale Set, Shared Worker Tiers (2), Publisher Scale Set, CN0-VM, Management Servers Scale Set) = **28GB**
+* **MySQL RP** - 2 VMs (RP VM, DB Host VM) = **5.5GB**
+* **SQL Server RP** - 2 VMs (RP VM, DB Host VM) = **5.5GB**
+* **App Service** - 7 VMs (File Server, SQL Host, Front End Scale Set, Shared Worker Tier, Publisher Scale Set, CN0-VM, Management Servers Scale Set) = **23GB**
 
-**Total with all RPs deployed = 42GB in addition to the core running Azure Stack ASDK VMs**
+**Total with all RPs deployed = 34GB in addition to the core running Azure Stack ASDK VMs**
 
-Before you run the ASDK Configurator, ensure that you have enough memory available on your ASDK host system. On a typical ASDK system, the core Azure Stack VMs will already consume between 50-60GB of host memory, so please ensure you have enough remaining to deploy the additional resource providers. A system with 128GB memory is recommended.
+Before you run the ASDK Configurator, ensure that you have enough memory available on your ASDK host system. On a typical ASDK system, the core Azure Stack VMs will already consume between 50-60GB of host memory, so please ensure you have enough remaining to deploy the additional resource providers. As per the updated specs here: https://docs.microsoft.com/en-us/azure/azure-stack/asdk/asdk-deploy-considerations, a system with at least 192GB memory is recommended to evaluate all features.
+
+Running on older/low performance hardware
+------------
+If your system doesn't have SSDs, or is an older system, the ASDK Configurator may experience issues during parallel deployment of virtual machines. This may also be true in environments where you have virtualized the ASDK, and are running it nested on an alternative virtualization/cloud platform, such as ESXi, or in an Azure VM. If that's the case, it's recommended to run the ConfigASDK.ps1 script with the **-serialMode flag**, and this will instruct the script to deploy any VMs, one at a time. This takes a little longer, but offers increased reliability on systems with lower levels of performance.
 
 Offline/Disconnected Support
 ------------
@@ -79,12 +85,6 @@ Offline/Disconnected Support
 * Do you want to download the 5GB+ of required dependencies (Ubuntu image, Database resource providers, App Service binaries, JSON files etc) in advance of running the script?
 
 If you answered **yes** to any of those, you can deploy the ConfigASDK in an offline/disconnected mode. To do so, you should **[read the offline/disconnected documentation.](</deployment/offline/README.md>)**
-
-Custom Region and External Domain Suffix
-------------
-* Support for customising Region and ExternalDomainSuffix aded by Rik Hepworth
-* $regionName and $externalDomainSuffix mirror equivalent parameters in DeploySingleNode.ps1 in the ASDK clouddeployment\setup folder
-**If you haven't hacked your ASDK deployment, DO NOT USE THESE!**
 
 Step by Step Guidance (for internet-connected ASDK)
 ------------
@@ -123,6 +123,7 @@ With the script downloaded successfully, you can move on to running the script. 
 * Use the **-registerASDK** flag to instruct the script to register your ASDK to Azure.
 * Use the **-useAzureCredsForRegistration** flag if you want to use the same *Service Administrator* Azure AD credentials to register the ASDK, as you did when deploying the ASDK.
 * If you specify -registerASDK but forget to use -useAzureCredsForRegistration, you will be prompted for alternative credentials.
+* If you are using older hardware, or lower performance hardware with no SSD storage, and are experiencing VM deployment errors, use **-serialMode** to set the script to deploy VMs one at a time, rather than in parallel. This can help with reliability on older, lower performance hardware.
 
 Usage Examples:
 -------------
@@ -136,7 +137,7 @@ Usage Examples:
 -registerASDK -useAzureCredsForRegistration -azureRegSubId "01234567-abcd-8901-234a-bcde5678fghi"
 ```
 
-**Scenario 2** - Using Azure AD for authentication. You wish to register the ASDK to Azure as part of the automated process. For registration, you wish to use a different set of Azure AD credentials from the set you used when you deployed your ASDK:
+**Scenario 2** - Using Azure AD for authentication. You wish to register the ASDK to Azure as part of the automated process. For registration, you wish to use a **different** set of Azure AD credentials from the set you used when you deployed your ASDK:
 
 ```powershell
 .\ConfigASDK.ps1 -azureDirectoryTenantName "contoso.onmicrosoft.com" -authenticationType AzureAD `

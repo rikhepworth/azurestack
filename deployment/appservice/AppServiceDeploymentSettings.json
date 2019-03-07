@@ -1,6 +1,6 @@
 ﻿{
-    "AzureResourceManagerDnsSuffix": "adminmanagement.<<RegionName>>.<<ExternalDomainSuffix>>",
-    "TenantAzureResourceManagerDnsSuffix": "management.<<RegionName>>.<<ExternalDomainSuffix>>",
+    "AzureResourceManagerDnsSuffix": "adminmanagement.local.azurestack.external",
+    "TenantAzureResourceManagerDnsSuffix": "management.local.azurestack.external",
     "AzureDirectoryTenantName": "<<AzureDirectoryTenantName>>",
     "IdentityApplicationId": "<<IdentityApplicationId>>",
     "VirtualNetwork": {
@@ -59,7 +59,7 @@
         "name": "Standard_A2"
     },
     "SelectedSmallWorkerSKUs": {
-        "name": "Standard_A1"
+        "name": "Standard_A1_v2"
     },
     "SelectedMediumWorkerSKUs": {
         "name": "Standard_A2"
@@ -75,14 +75,14 @@
     "FileShareUserPassword": "<<Password>>",
     "ResourceGroupName": "appservice-infra",
     "StorageAccountName": "appsvclocalstor",
-    "IdentityPfxCertPath": "<<CertPathDoubleSlash>>\\sso.appservice.<<RegionName>>.<<ExternalDomainSuffix>>.pfx",
+    "IdentityPfxCertPath": "<<CertPathDoubleSlash>>\\sso.appservice.local.azurestack.external.pfx",
     "IdentityPfxCertPassword": "<<Password>>",
     "RootCertPath": "<<CertPathDoubleSlash>>\\AzureStackCertificationAuthority.cer",
-    "DefaultPfxCertPath": "<<CertPathDoubleSlash>>\\_.appservice.<<RegionName>>.<<ExternalDomainSuffix>>.pfx",
+    "DefaultPfxCertPath": "<<CertPathDoubleSlash>>\\_.appservice.local.azurestack.external.pfx",
     "DefaultPfxCertPassword": "<<Password>>",
-    "ResourceProviderPfxCertPath": "<<CertPathDoubleSlash>>\\api.appservice.<<RegionName>>.<<ExternalDomainSuffix>>.pfx",
+    "ResourceProviderPfxCertPath": "<<CertPathDoubleSlash>>\\api.appservice.local.azurestack.external.pfx",
     "ResourceProviderPfxCertPassword": "<<Password>>",
-    "PublisherPfxCertPath": "<<CertPathDoubleSlash>>\\ftp.appservice.<<RegionName>>.<<ExternalDomainSuffix>>.pfx",
+    "PublisherPfxCertPath": "<<CertPathDoubleSlash>>\\ftp.appservice.local.azurestack.external.pfx",
     "PublisherPfxCertPassword": "<<Password>>",
     "SQLServerName": "<<SQLServerName>>",
     "SQLSysAdminLogin": "<<SQLServerUser>>",
@@ -91,7 +91,7 @@
     "SelectedManagementRoleInstances": 1,
     "SelectedPublisherRoleInstances": 1,
     "SelectedFrontEndRoleInstances": 1,
-    "SelectedWorkerInstances": 2,
+    "SelectedWorkerInstances": 1,
     "PlatformImage": {
         "Publisher": "MicrosoftWindowsServer",
         "Offer": "WindowsServer",

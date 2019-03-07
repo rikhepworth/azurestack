@@ -52,18 +52,8 @@ param (
     [Parameter(Mandatory = $true)]
     [String] $tableName,
 
-    # RegionName for if you need to override the default 'local'
     [Parameter(Mandatory = $false)]
-    [string] $regionName = 'local',
-    
-    # External Domain Suffix for if you need to override the default 'azurestack.external'
-    [Parameter(Mandatory = $false)]
-    [string] $externalDomainSuffix = 'azurestack.external',
-
-	# Github Account to override Matt's repo for download
-	[Parameter(Mandatory = $false)]
-    [String] $gitHubAccount = 'rikhepworth'
-
+    [String] $serialMode
 )
 
 $Global:VerbosePreference = "Continue"
@@ -141,6 +131,9 @@ elseif (($skipRP -eq $false) -and ($progressCheck -ne "Complete")) {
             Clear-AzureRmContext -Scope CurrentUser -Force
             Disable-AzureRMContextAutosave -Scope CurrentUser
 
+            Import-Module -Name Azure.Storage -RequiredVersion 4.5.0 -Verbose
+            Import-Module -Name AzureRM.Storage -RequiredVersion 5.0.4 -Verbose
+
             if ($vmType -ne "AppServiceFS") {
                 $ubuntuImageJobCheck = CheckProgress -progressStage "UbuntuServerImage"
                 while ($ubuntuImageJobCheck -ne "Complete") {
@@ -153,13 +146,13 @@ elseif (($skipRP -eq $false) -and ($progressCheck -ne "Complete")) {
                 }
             }
             elseif ($vmType -eq "AppServiceFS") {
-                $serverFullJobCheck = CheckProgress -progressStage "ServerFull2016Image"
+                $serverFullJobCheck = CheckProgress -progressStage "ServerFullImage"
                 while ($serverFullJobCheck -ne "Complete") {
                     Write-Host "The ServerFullImage stage of the process has not yet completed. Checking again in 20 seconds"
                     Start-Sleep -Seconds 20
-                    $serverFullJobCheck = CheckProgress -progressStage "ServerFull2016Image"
+                    $serverFullJobCheck = CheckProgress -progressStage "ServerFullImage"
                     if ($serverFullJobCheck -eq "Failed") {
-                        throw "The ServerFull2016Image stage of the process has failed. This should fully complete before the File Server can be deployed. Check the ServerFullImage log, ensure that step is completed first, and rerun."
+                        throw "The ServerFullImage stage of the process has failed. This should fully complete before the File Server can be deployed. Check the ServerFullImage log, ensure that step is completed first, and rerun."
                     }
                 }
             }
@@ -204,17 +197,59 @@ elseif (($skipRP -eq $false) -and ($progressCheck -ne "Complete")) {
                 }
             }
             # Need to confirm that both DB Hosting VM deployments don't operate at exactly the same time, or there may be a conflict with creating the resource groups and other resources at the start of the deployment
-            if ($vmType -eq "SQLServer") {
-                if (($skipMySQL -eq $false) -and ($skipMSSQL -eq $false)) {
-                    $mySQLProgressCheck = CheckProgress -progressStage "MySQLDBVM"
-                    if ($mySQLProgressCheck -ne "Complete") {
-                        Write-Host "To avoid deployment conflicts, delaying the SQL Server VM deployment by 2 minutes to allow initial resources to be created"
-                        Start-Sleep -Seconds 120
+            if ($serialMode -eq $false) {
+                if ($vmType -eq "SQLServer") {
+                    if (($skipMySQL -eq $false) -and ($skipMSSQL -eq $false)) {
+                        $mySQLProgressCheck = CheckProgress -progressStage "MySQLDBVM"
+                        if ($mySQLProgressCheck -ne "Complete") {
+                            Write-Host "To avoid deployment conflicts, delaying the SQL Server VM deployment by 2 minutes to allow initial resources to be created"
+                            Start-Sleep -Seconds 120
+                        }
                     }
                 }
             }
+            # If the user had chosen to deploy with SerialMode, this will stagger the VM deployments, one after another.
+            if ($serialMode -eq $true) {
+                if ($vmType -eq "SQLServer") {
+                    $mySQLProgressCheck = CheckProgress -progressStage "MySQLDBVM"
+                    while ($mySQLProgressCheck -eq "Incomplete") {
+                        Write-Host "The MySQLDBVM stage of the process has not yet completed. This should complete first in a serialMode deployment. Checking again in 60 seconds"
+                        Start-Sleep -Seconds 60
+                        $mySQLProgressCheck = CheckProgress -progressStage "MySQLDBVM"
+                        if ($mySQLProgressCheck -eq "Failed") {
+                            Write-Host "MySQLDBVM deployment seems to have failed, but this doesn't affect the SQL Server VM Deployment. Process can continue."
+                            BREAK
+                        }
+                    }
+                }
+                elseif ($vmType -eq "AppServiceDB") {
+                    $msSQLProgressCheck = CheckProgress -progressStage "SQLServerDBVM"
+                    while (($msSQLProgressCheck -eq "Incomplete")) {
+                        Write-Host "The SQLServerDBVM stage of the process has not yet completed. This should complete first in a serialMode deployment. Checking again in 60 seconds"
+                        Start-Sleep -Seconds 60
+                        $msSQLProgressCheck = CheckProgress -progressStage "SQLServerDBVM"
+                        if ($msSQLProgressCheck -eq "Failed") {
+                            Write-Host "SQLServerDBVM deployment seems to have failed, but this doesn't affect the App Service DB VM Deployment. Process can continue."
+                            BREAK
+                        }
+                    }
+                }
+                elseif ($vmType -eq "AppServiceFS") {
+                    $sqlRPProgressCheck = CheckProgress -progressStage "SQLServerRP"
+                    while (($sqlRPProgressCheck -eq "Incomplete")) {
+                        Write-Host "The SQLServerRP stage of the process has not yet completed. This should complete first in a serialMode deployment. Checking again in 60 seconds"
+                        Start-Sleep -Seconds 60
+                        $sqlRPProgressCheck = CheckProgress -progressStage "SQLServerRP"
+                        if ($sqlRPProgressCheck -eq "Failed") {
+                            Write-Host "SQLServerRP deployment seems to have failed, but this doesn't affect the App Service File Server VM Deployment. Process can continue."
+                            BREAK
+                        }
+                    }
+                }
+            }
+
             ### Login to Azure Stack ###
-            $ArmEndpoint = "https://adminmanagement.$regionName.$externalDomainSuffix"
+            $ArmEndpoint = "https://adminmanagement.local.azurestack.external"
             Add-AzureRMEnvironment -Name "AzureStackAdmin" -ArmEndpoint "$ArmEndpoint" -ErrorAction Stop
             Add-AzureRmAccount -EnvironmentName "AzureStackAdmin" -TenantId $tenantID -Credential $asdkCreds -ErrorAction Stop | Out-Null
 
@@ -226,11 +261,11 @@ elseif (($skipRP -eq $false) -and ($progressCheck -ne "Complete")) {
             # Dynamically retrieve the mainTemplate.json URI from the Azure Stack Gallery to determine deployment base URI
             if ($deploymentMode -eq "Online") {
                 if ($vmType -eq "AppServiceFS") {
-                    $mainTemplateURI = "https://raw.githubusercontent.com/$gitHubAccount/azurestack/$branch/deployment/templates/FileServer/azuredeploy.json"
+                    $mainTemplateURI = "https://raw.githubusercontent.com/mattmcspirit/azurestack/$branch/deployment/templates/FileServer/azuredeploy.json"
                 }
                 else {
                     $mainTemplateURI = $(Get-AzsGalleryItem | Where-Object {$_.Name -like "ASDK.$azpkg*"}).DefinitionTemplates.DeploymentTemplateFileUris.Values | Where-Object {$_ -like "*mainTemplate.json"}
-                    $scriptBaseURI = "https://raw.githubusercontent.com/$gitHubAccount/azurestack/master/deployment/scripts/"
+                    $scriptBaseURI = "https://raw.githubusercontent.com/mattmcspirit/azurestack/master/deployment/scripts/"
                 }
             }
             elseif (($deploymentMode -eq "PartialOnline") -or ($deploymentMode -eq "Offline")) {
@@ -269,14 +304,14 @@ elseif (($skipRP -eq $false) -and ($progressCheck -ne "Complete")) {
                     New-AzureRmResourceGroupDeployment -Name "DeployMySQLHost" -ResourceGroupName $rg -TemplateUri $mainTemplateURI `
                         -vmName "mysqlhost" -adminUsername "mysqladmin" -adminPassword $secureVMpwd -mySQLPassword $secureVMpwd -allowRemoteConnections "Yes" `
                         -virtualNetworkName "dbhosting_vnet" -virtualNetworkSubnetName "dbhosting_subnet" -publicIPAddressDomainNameLabel "mysqlhost" `
-                        -vmSize Standard_A2 -mode Incremental -scriptBaseUrl $scriptBaseURI -Verbose -ErrorAction Stop
+                        -vmSize Standard_A1_v2 -mode Incremental -scriptBaseUrl $scriptBaseURI -Verbose -ErrorAction Stop
                 }
                 elseif (!(Get-AzureRmResourceGroupDeployment -ResourceGroupName $rg -Name "DeployMySQLHost" -ErrorAction SilentlyContinue)) {
                     Write-Host "No previous deployment found - starting deployment of $vmType database host"
                     New-AzureRmResourceGroupDeployment -Name "DeployMySQLHost" -ResourceGroupName $rg -TemplateUri $mainTemplateURI `
                         -vmName "mysqlhost" -adminUsername "mysqladmin" -adminPassword $secureVMpwd -mySQLPassword $secureVMpwd -allowRemoteConnections "Yes" `
                         -virtualNetworkName "dbhosting_vnet" -virtualNetworkSubnetName "dbhosting_subnet" -publicIPAddressDomainNameLabel "mysqlhost" `
-                        -vmSize Standard_A2 -mode Incremental -scriptBaseUrl $scriptBaseURI -Verbose -ErrorAction Stop
+                        -vmSize Standard_A1_v2 -mode Incremental -scriptBaseUrl $scriptBaseURI -Verbose -ErrorAction Stop
                 }
             }
             elseif ($vmType -eq "SQLServer") {
@@ -302,14 +337,14 @@ elseif (($skipRP -eq $false) -and ($progressCheck -ne "Complete")) {
                         New-AzureRmResourceGroupDeployment -Name "DeploySQLHost" -ResourceGroupName $rg -TemplateUri $mainTemplateURI `
                             -vmName "sqlhost" -adminUsername "sqladmin" -adminPassword $secureVMpwd -msSQLPassword $secureVMpwd -scriptBaseUrl $scriptBaseURI `
                             -virtualNetworkName "dbhosting_vnet" -virtualNetworkSubnetName "dbhosting_subnet" -publicIPAddressDomainNameLabel "sqlhost" `
-                            -vmSize Standard_A2 -mode Incremental -Verbose -ErrorAction Stop
+                            -vmSize Standard_A1_v2 -mode Incremental -Verbose -ErrorAction Stop
                     }
                     else {
                         # Assume MySQL RP was deployed, and DB Hosting RG and networks were previously created
                         New-AzureRmResourceGroupDeployment -Name "DeploySQLHost" -ResourceGroupName $rg -TemplateUri $mainTemplateURI `
                             -vmName "sqlhost" -adminUsername "sqladmin" -adminPassword $secureVMpwd -msSQLPassword $secureVMpwd -scriptBaseUrl $scriptBaseURI `
                             -virtualNetworkNewOrExisting "existing" -virtualNetworkName "dbhosting_vnet" -virtualNetworkSubnetName "dbhosting_subnet" `
-                            -publicIPAddressDomainNameLabel "sqlhost" -vmSize Standard_A2 -mode Incremental -Verbose -ErrorAction Stop
+                            -publicIPAddressDomainNameLabel "sqlhost" -vmSize Standard_A1_v2 -mode Incremental -Verbose -ErrorAction Stop
                     }
                 }
                 elseif (!(Get-AzureRmResourceGroupDeployment -ResourceGroupName $rg -Name "DeploySQLHost" -ErrorAction SilentlyContinue)) {
@@ -319,14 +354,14 @@ elseif (($skipRP -eq $false) -and ($progressCheck -ne "Complete")) {
                         New-AzureRmResourceGroupDeployment -Name "DeploySQLHost" -ResourceGroupName $rg -TemplateUri $mainTemplateURI `
                             -vmName "sqlhost" -adminUsername "sqladmin" -adminPassword $secureVMpwd -msSQLPassword $secureVMpwd -scriptBaseUrl $scriptBaseURI `
                             -virtualNetworkName "dbhosting_vnet" -virtualNetworkSubnetName "dbhosting_subnet" -publicIPAddressDomainNameLabel "sqlhost" `
-                            -vmSize Standard_A2 -mode Incremental -Verbose -ErrorAction Stop
+                            -vmSize Standard_A1_v2 -mode Incremental -Verbose -ErrorAction Stop
                     }
                     else {
                         # Assume MySQL RP was deployed, and DB Hosting RG and networks were previously created
                         New-AzureRmResourceGroupDeployment -Name "DeploySQLHost" -ResourceGroupName $rg -TemplateUri $mainTemplateURI `
                             -vmName "sqlhost" -adminUsername "sqladmin" -adminPassword $secureVMpwd -msSQLPassword $secureVMpwd -scriptBaseUrl $scriptBaseURI `
                             -virtualNetworkNewOrExisting "existing" -virtualNetworkName "dbhosting_vnet" -virtualNetworkSubnetName "dbhosting_subnet" `
-                            -publicIPAddressDomainNameLabel "sqlhost" -vmSize Standard_A2 -mode Incremental -Verbose -ErrorAction Stop
+                            -publicIPAddressDomainNameLabel "sqlhost" -vmSize Standard_A1_v2 -mode Incremental -Verbose -ErrorAction Stop
                     }
                 }
             }
@@ -389,13 +424,13 @@ elseif (($skipRP -eq $false) -and ($progressCheck -ne "Complete")) {
                     Write-Host "Starting deployment again..."
                     New-AzureRmResourceGroupDeployment -Name "DeployAppServiceDB" -ResourceGroupName $rg -TemplateUri $mainTemplateURI -scriptBaseUrl $scriptBaseURI `
                         -vmName "sqlapp" -adminUsername "sqladmin" -adminPassword $secureVMpwd -msSQLPassword $secureVMpwd -storageAccountName "sqlappstor" `
-                        -publicIPAddressDomainNameLabel "sqlapp" -publicIPAddressName "sqlapp_ip" -vmSize Standard_A2 -mode Incremental -Verbose -ErrorAction Stop
+                        -publicIPAddressDomainNameLabel "sqlapp" -publicIPAddressName "sqlapp_ip" -vmSize Standard_A1_v2 -mode Incremental -Verbose -ErrorAction Stop
                 }
                 elseif (!(Get-AzureRmResourceGroupDeployment -ResourceGroupName $rg -Name "DeployAppServiceDB" -ErrorAction SilentlyContinue)) {
                     Write-Host "No previous deployment found - starting deployment of File Server"
                     New-AzureRmResourceGroupDeployment -Name "DeployAppServiceDB" -ResourceGroupName $rg -TemplateUri $mainTemplateURI -scriptBaseUrl $scriptBaseURI `
                         -vmName "sqlapp" -adminUsername "sqladmin" -adminPassword $secureVMpwd -msSQLPassword $secureVMpwd -storageAccountName "sqlappstor" `
-                        -publicIPAddressDomainNameLabel "sqlapp" -publicIPAddressName "sqlapp_ip" -vmSize Standard_A2 -mode Incremental -Verbose -ErrorAction Stop
+                        -publicIPAddressDomainNameLabel "sqlapp" -publicIPAddressName "sqlapp_ip" -vmSize Standard_A1_v2 -mode Incremental -Verbose -ErrorAction Stop
                 }
                 # Get the FQDN of the VM
                 $sqlAppServerFqdn = (Get-AzureRmPublicIpAddress -Name "sqlapp_ip" -ResourceGroupName $rg).DnsSettings.Fqdn

@@ -39,8 +39,8 @@ In this example, you run a script to deploy a virtual machine to Azure Stack Dev
            -publicIPAddressName sql_ip$myNum `
            -publicIPAddressDomainNameLabel sql$myNum `
            -publicIPAddressNewOrExisting new `
-           -scriptBaseUrl "https://raw.githubusercontent.com/rikhepworth/azurestack/master/deployment/scripts/" `
-           -templateBaseUrl "https://raw.githubusercontent.com/rikhepworth/azurestack/master/deployment/packages/MSSQL/ASDK.MSSQL/DeploymentTemplates/"
+           -scriptBaseUrl "https://raw.githubusercontent.com/mattmcspirit/azurestack/master/deployment/scripts/" `
+           -templateBaseUrl "https://raw.githubusercontent.com/mattmcspirit/azurestack/master/deployment/packages/MSSQL/ASDK.MSSQL/DeploymentTemplates/"
    ```
 3. Open the Azure Stack portal, click **Browse**, click **Virtual machines**, and look for your new virtual machine (*SQLDeployment001*).
 

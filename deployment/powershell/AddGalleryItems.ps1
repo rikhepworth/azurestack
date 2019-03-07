@@ -32,20 +32,7 @@ param (
     [String] $databaseName,
 
     [Parameter(Mandatory = $true)]
-    [String] $tableName,
-
-    # RegionName for if you need to override the default 'local'
-    [Parameter(Mandatory = $false)]
-    [string] $regionName = 'local',
-    
-    # External Domain Suffix for if you need to override the default 'azurestack.external'
-    [Parameter(Mandatory = $false)]
-    [string] $externalDomainSuffix = 'azurestack.external',
-
-	# Github Account to override Matt's repo for download
-	[Parameter(Mandatory = $false)]
-    [String] $gitHubAccount = 'rikhepworth'
-
+    [String] $tableName
 )
 
 $Global:VerbosePreference = "Continue"
@@ -81,8 +68,11 @@ if (($progressCheck -eq "Incomplete") -or ($progressCheck -eq "Failed")) {
         Clear-AzureRmContext -Scope CurrentUser -Force
         Disable-AzureRMContextAutosave -Scope CurrentUser
 
+        Import-Module -Name Azure.Storage -RequiredVersion 4.5.0 -Verbose
+        Import-Module -Name AzureRM.Storage -RequiredVersion 5.0.4 -Verbose
+
         ### Login to Azure Stack, then confirm if the MySQL Gallery Item is already present ###
-        $ArmEndpoint = "https://adminmanagement.$regionName.$externalDomainSuffix"
+        $ArmEndpoint = "https://adminmanagement.local.azurestack.external"
         Add-AzureRMEnvironment -Name "AzureStackAdmin" -ArmEndpoint "$ArmEndpoint" -ErrorAction Stop
         Add-AzureRmAccount -EnvironmentName "AzureStackAdmin" -TenantId $tenantID -Credential $asdkCreds -ErrorAction Stop | Out-Null
         # Set Storage Variables
@@ -128,10 +118,10 @@ if (($progressCheck -eq "Incomplete") -or ($progressCheck -eq "Failed")) {
             if ($deploymentMode -eq "Online") {
                 Write-Host "Uploading $azpkgPackageName"
                 if ($azpkg -eq "MySQL") {
-                    $azpkgPackageURL = "https://github.com/$gitHubAccount/azurestack/raw/$branch/deployment/packages/MySQL/ASDK.MySQL.1.0.0.azpkg"
+                    $azpkgPackageURL = "https://github.com/mattmcspirit/azurestack/raw/$branch/deployment/packages/MySQL/ASDK.MySQL.1.0.0.azpkg"
                 }
                 elseif ($azpkg -eq "SQLServer") {
-                    $azpkgPackageURL = "https://github.com/$gitHubAccount/azurestack/raw/$branch/deployment/packages/MSSQL/ASDK.MSSQL.1.0.0.azpkg"
+                    $azpkgPackageURL = "https://github.com/mattmcspirit/azurestack/raw/$branch/deployment/packages/MSSQL/ASDK.MSSQL.1.0.0.azpkg"
                 }  
             }
             # If this isn't an online deployment, use the extracted zip file, and upload to a storage account

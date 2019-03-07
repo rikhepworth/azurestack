@@ -25,15 +25,7 @@ param (
     [String] $databaseName,
 
     [Parameter(Mandatory = $true)]
-    [String] $tableName,
-
-    # RegionName for if you need to override the default 'local'
-    [Parameter(Mandatory = $false)]
-    [string] $regionName = 'local',
-    
-    # External Domain Suffix for if you need to override the default 'azurestack.external'
-    [Parameter(Mandatory = $false)]
-    [string] $externalDomainSuffix = 'azurestack.external'
+    [String] $tableName
 )
 
 $Global:VerbosePreference = "Continue"
@@ -72,13 +64,16 @@ elseif ((($deploymentMode -eq "PartialOnline") -or ($deploymentMode -eq "Offline
         Clear-AzureRmContext -Scope CurrentUser -Force
         Disable-AzureRMContextAutosave -Scope CurrentUser
 
+        Import-Module -Name Azure.Storage -RequiredVersion 4.5.0 -Verbose
+        Import-Module -Name AzureRM.Storage -RequiredVersion 5.0.4 -Verbose
+
         # Firstly create the appropriate RG, storage account and container
         # Scan the $asdkPath\scripts folder and retrieve both files, add to an array, then upload to the storage account
         # Save URI of the container to a variable to use later
         $asdkOfflineRGName = "azurestack-offline"
         $asdkOfflineStorageAccountName = "offlinestor"
         $asdkOfflineContainerName = "offlinecontainer"
-        $ArmEndpoint = "https://adminmanagement.$regionName.$externalDomainSuffix"
+        $ArmEndpoint = "https://adminmanagement.local.azurestack.external"
         Add-AzureRMEnvironment -Name "AzureStackAdmin" -ArmEndpoint "$ArmEndpoint" -ErrorAction Stop
         Add-AzureRmAccount -EnvironmentName "AzureStackAdmin" -TenantId $TenantID -Credential $asdkCreds -ErrorAction Stop | Out-Null
         if (-not (Get-AzureRmResourceGroup -Name $asdkOfflineRGName -Location $azsLocation -ErrorAction SilentlyContinue)) {
@@ -128,7 +123,7 @@ elseif ((($deploymentMode -eq "PartialOnline") -or ($deploymentMode -eq "Offline
     }
 }
 elseif ($deploymentMode -eq "Online") {
-    Write-Host "This is not an offline deployent, skipping step`r`n"
+    Write-Host "This is not an offline deployment, skipping step`r`n"
     # Update the ConfigASDK database with skip status
     $progressStage = $progressName
     StageSkipped -progressStage $progressStage
