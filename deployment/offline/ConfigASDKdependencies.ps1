@@ -117,7 +117,7 @@ try {
     if (!$branch) {
         $branch = "master"
     }
-    $urlToTest = "https://raw.githubusercontent.com/mattmcspirit/azurestack/$branch/README.md"
+    $urlToTest = "https://raw.githubusercontent.com/rikhepworth/azurestack/$branch/README.md"
     [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
     $statusCode = Invoke-WebRequest "$urlToTest" -UseBasicParsing -ErrorAction SilentlyContinue | ForEach-Object {$_.StatusCode} -ErrorAction SilentlyContinue
     if ($statusCode -eq 200) {
@@ -254,7 +254,7 @@ try {
     $table.Columns.Add("Uri", "string") | Out-Null
 
     # ConfigASDK.ps1 Script
-    $row = $table.NewRow(); $row.Uri = "https://raw.githubusercontent.com/mattmcspirit/azurestack/$branch/deployment/ConfigASDK.ps1"
+    $row = $table.NewRow(); $row.Uri = "https://raw.githubusercontent.com/rikhepworth/azurestack/$branch/deployment/ConfigASDK.ps1"
     $row.filename = "ConfigASDK.ps1"; $row.path = "$downloadPath"; $row.productName = "ASDK Configurator Script"; $Table.Rows.Add($row)
     # SqlLocalDB MSI
     $row = $table.NewRow(); $row.Uri = "https://download.microsoft.com/download/E/F/2/EF23C21D-7860-4F05-88CE-39AA114B014B/SqlLocalDB.msi"
@@ -263,28 +263,29 @@ try {
     $row = $table.NewRow(); $row.Uri = "https://github.com/Azure/AzureStack-Tools/archive/master.zip"
     $row.filename = "Master.zip"; $row.path = "$ASDKpath"; $row.productName = "Azure Stack Tools"; $Table.Rows.Add($row)
     # Ubuntu Server 16.04 ZIP
-    $row = $table.NewRow(); $row.Uri = "https://cloud-images.ubuntu.com/releases/xenial/release/ubuntu-16.04-server-cloudimg-amd64-disk1.vhd.zip"
+    #$row = $table.NewRow(); $row.Uri = "https://cloud-images.ubuntu.com/releases/xenial/release/ubuntu-16.04-server-cloudimg-amd64-disk1.vhd.zip"
+    $row = $table.NewRow(); $row.Uri = "https://cloud-images.ubuntu.com/releases/xenial/release-20181207/ubuntu-16.04-server-cloudimg-amd64-disk1.vhd.zip"
     $row.filename = "UbuntuServer1.0.0.zip"; $row.path = "$ubuntuPath"; $row.productName = "Ubuntu Server 16.04 LTS zip file"; $Table.Rows.Add($row)
     # Ubuntu Server AZPKG
-    $row = $table.NewRow(); $row.Uri = "https://github.com/mattmcspirit/azurestack/raw/$branch/deployment/packages/Ubuntu/Canonical.UbuntuServer1604LTS-ARM.1.0.0.azpkg"
+    $row = $table.NewRow(); $row.Uri = "https://github.com/rikhepworth/azurestack/raw/$branch/deployment/packages/Ubuntu/Canonical.UbuntuServer1604LTS-ARM.1.0.0.azpkg"
     $row.filename = "Canonical.UbuntuServer1604LTS-ARM.1.0.0.azpkg"; $row.path = "$packagePath"; $row.productName = "Ubuntu Server Marketplace Package"; $Table.Rows.Add($row)
     # Convert-WindowsImage.ps1 Script
-    $row = $table.NewRow(); $row.Uri = "https://raw.githubusercontent.com/mattmcspirit/azurestack/$branch/deployment/scripts/Convert-WindowsImage.ps1"
+    $row = $table.NewRow(); $row.Uri = "https://raw.githubusercontent.com/rikhepworth/azurestack/$branch/deployment/scripts/Convert-WindowsImage.ps1"
     $row.filename = "Convert-WindowsImage.ps1"; $row.path = "$imagesPath"; $row.productName = "Convert-WindowsImage.ps1 VHD Creation Tool"; $Table.Rows.Add($row)
     # VM Endpoint Aliases Doc
-    $row = $table.NewRow(); $row.Uri = "https://raw.githubusercontent.com/mattmcspirit/azurestack/$branch/deployment/packages/Aliases/aliases.json"
+    $row = $table.NewRow(); $row.Uri = "https://raw.githubusercontent.com/rikhepworth/azurestack/$branch/deployment/packages/Aliases/aliases.json"
     $row.filename = "aliases.json"; $row.path = "$imagesPath"; $row.productName = "VM aliases endpoint doc"; $Table.Rows.Add($row)
     # Windows Server DC AZPKG
-    $row = $table.NewRow(); $row.Uri = "https://github.com/mattmcspirit/azurestack/raw/$branch/deployment/packages/WindowsServer/Microsoft.WindowsServer2016Datacenter-ARM.1.0.0.azpkg"
+    $row = $table.NewRow(); $row.Uri = "https://github.com/rikhepworth/azurestack/raw/$branch/deployment/packages/WindowsServer/Microsoft.WindowsServer2016Datacenter-ARM.1.0.0.azpkg"
     $row.filename = "Microsoft.WindowsServer2016Datacenter-ARM.1.0.0.azpkg"; $row.path = "$packagePath"; $row.productName = "Windows Server 2016 Datacenter Marketplace Package"; $Table.Rows.Add($row)
     # Windows Server DC Core AZPKG
-    $row = $table.NewRow(); $row.Uri = "https://github.com/mattmcspirit/azurestack/raw/$branch/deployment/packages/WindowsServer/Microsoft.WindowsServer2016DatacenterServerCore-ARM.1.0.0.azpkg"
+    $row = $table.NewRow(); $row.Uri = "https://github.com/rikhepworth/azurestack/raw/$branch/deployment/packages/WindowsServer/Microsoft.WindowsServer2016DatacenterServerCore-ARM.1.0.0.azpkg"
     $row.filename = "Microsoft.WindowsServer2016DatacenterServerCore-ARM.1.0.0.azpkg"; $row.path = "$packagePath"; $row.productName = "Windows Server 2016 Datacenter Core Marketplace Package"; $Table.Rows.Add($row)
     # MYSQL AZPKG
-    $row = $table.NewRow(); $row.Uri = "https://github.com/mattmcspirit/azurestack/raw/$branch/deployment/packages/MySQL/ASDK.MySQL.1.0.0.azpkg"
+    $row = $table.NewRow(); $row.Uri = "https://github.com/rikhepworth/azurestack/raw/$branch/deployment/packages/MySQL/ASDK.MySQL.1.0.0.azpkg"
     $row.filename = "ASDK.MySQL.1.0.0.azpkg"; $row.path = "$packagePath"; $row.productName = "MySQL Marketplace Package"; $Table.Rows.Add($row)
     # SQL AZPKG
-    $row = $table.NewRow(); $row.Uri = "https://github.com/mattmcspirit/azurestack/raw/$branch/deployment/packages/MSSQL/ASDK.MSSQL.1.0.0.azpkg"
+    $row = $table.NewRow(); $row.Uri = "https://github.com/rikhepworth/azurestack/raw/$branch/deployment/packages/MSSQL/ASDK.MSSQL.1.0.0.azpkg"
     $row.filename = "ASDK.MSSQL.1.0.0.azpkg"; $row.path = "$packagePath"; $row.productName = "SQL Server Marketplace Package"; $Table.Rows.Add($row)
     # MySQL RP
     $row = $table.NewRow(); $row.Uri = "https://aka.ms/azurestackmysqlrp11300"
@@ -296,7 +297,7 @@ try {
     $row = $table.NewRow(); $row.Uri = "https://aka.ms/azurestacksqlrp11300"
     $row.filename = "SQLServer.zip"; $row.path = "$dbPath"; $row.productName = "SQL Server Resource Provider Files"; $Table.Rows.Add($row)
     # MySQL Install Script
-    $row = $table.NewRow(); $row.Uri = "https://raw.githubusercontent.com/mattmcspirit/azurestack/$branch/deployment/scripts/install_MySQL_Offline.sh"
+    $row = $table.NewRow(); $row.Uri = "https://raw.githubusercontent.com/rikhepworth/azurestack/$branch/deployment/scripts/install_MySQL_Offline.sh"
     $row.filename = "install_MySQL.sh"; $row.path = "$scriptPath"; $row.productName = "MySQL install script"; $Table.Rows.Add($row)
 
     ### Grab the MySQL Offline Binaries - used when ASDK is deployed in a completely offline mode
@@ -356,7 +357,7 @@ try {
     $row.filename = "mysql-server.deb"; $row.path = "$binaryPath"; $row.productName = "MySQL Server dependency"; $Table.Rows.Add($row)
 
     # SQL Server Install Script
-    $row = $table.NewRow(); $row.Uri = "https://raw.githubusercontent.com/mattmcspirit/azurestack/$branch/deployment/scripts/install_MSSQL_Offline.sh"
+    $row = $table.NewRow(); $row.Uri = "https://raw.githubusercontent.com/rikhepworth/azurestack/$branch/deployment/scripts/install_MSSQL_Offline.sh"
     $row.filename = "install_MSSQL.sh"; $row.path = "$scriptPath"; $row.productName = "SQL Server Install Script"; $Table.Rows.Add($row)
 
     ### Grab the SQL Server 2017 for Ubuntu Offline Binaries - used when ASDK is deployed in a completely offline mode
@@ -425,31 +426,31 @@ try {
     $row.filename = "mssql-libsasl2.deb"; $row.path = "$binaryPath"; $row.productName = "SQL Server 2017 libsasl2 dependency"; $Table.Rows.Add($row)
 
     # Add MySQL Hosting Server Template
-    $row = $table.NewRow(); $row.Uri = "https://raw.githubusercontent.com/mattmcspirit/azurestack/$branch/deployment/templates/MySQLHosting/azuredeploy.json"
+    $row = $table.NewRow(); $row.Uri = "https://raw.githubusercontent.com/rikhepworth/azurestack/$branch/deployment/templates/MySQLHosting/azuredeploy.json"
     $row.filename = "mySqlHostingTemplate.json"; $row.path = "$templatePath"; $row.productName = "Add MySQL Hosting Server template for deployment"; $Table.Rows.Add($row)
     # Add SQL Hosting Server Template
-    $row = $table.NewRow(); $row.Uri = "https://raw.githubusercontent.com/mattmcspirit/azurestack/$branch/deployment/templates/SQLHosting/azuredeploy.json"
+    $row = $table.NewRow(); $row.Uri = "https://raw.githubusercontent.com/rikhepworth/azurestack/$branch/deployment/templates/SQLHosting/azuredeploy.json"
     $row.filename = "sqlHostingTemplate.json"; $row.path = "$templatePath"; $row.productName = "Add SQL Server Hosting Server template for deployment"; $Table.Rows.Add($row)
     # File Server Template
-    $row = $table.NewRow(); $row.Uri = "https://raw.githubusercontent.com/mattmcspirit/azurestack/$branch/deployment/templates/FileServer/azuredeploy.json"
+    $row = $table.NewRow(); $row.Uri = "https://raw.githubusercontent.com/rikhepworth/azurestack/$branch/deployment/templates/FileServer/azuredeploy.json"
     $row.filename = "FileServerTemplate.json"; $row.path = "$templatePath"; $row.productName = "File Server template for deployment"; $Table.Rows.Add($row)
     # File Server PowerShell Script
-    $row = $table.NewRow(); $row.Uri = "https://raw.githubusercontent.com/mattmcspirit/azurestack/$branch/deployment/templates/FileServer/scripts/OnStartAzureVirtualMachineFileServer.ps1"
+    $row = $table.NewRow(); $row.Uri = "https://raw.githubusercontent.com/rikhepworth/azurestack/$branch/deployment/templates/FileServer/scripts/OnStartAzureVirtualMachineFileServer.ps1"
     $row.filename = "OnStartAzureVirtualMachineFileServer.ps1"; $row.path = "$scriptPath"; $row.productName = "File Server script for deployment"; $Table.Rows.Add($row)
     # File Server DSC zip Script
-    $row = $table.NewRow(); $row.Uri = "https://github.com/mattmcspirit/azurestack/raw/$branch/deployment/templates/FileServer/scripts/fileserver.cr.zip"
+    $row = $table.NewRow(); $row.Uri = "https://github.com/rikhepworth/azurestack/raw/$branch/deployment/templates/FileServer/scripts/fileserver.cr.zip"
     $row.filename = "fileserver.cr.zip"; $row.path = "$scriptPath"; $row.productName = "File Server DSC zip for deployment"; $Table.Rows.Add($row)
     # App Service Helper Scripts
     $row = $table.NewRow(); $row.Uri = "https://aka.ms/appsvconmashelpers"
     $row.filename = "appservicehelper.zip"; $row.path = "$appServicePath"; $row.productName = "App Service Resource Provider Helper files"; $Table.Rows.Add($row)
     # App Service Installer
-    $row = $table.NewRow(); $row.Uri = "https://aka.ms/appsvconmasinstaller"
+    $row = $table.NewRow(); $row.Uri = "https://aka.ms/appsvcupdate4installer"
     $row.filename = "appservice.exe"; $row.path = "$appServicePath"; $row.productName = "App Service installer"; $Table.Rows.Add($row)
     # App Service PreDeployment JSON
-    $row = $table.NewRow(); $row.Uri = "https://raw.githubusercontent.com/mattmcspirit/azurestack/$branch/deployment/appservice/AppServiceDeploymentSettings.json"
+    $row = $table.NewRow(); $row.Uri = "https://raw.githubusercontent.com/rikhepworth/azurestack/$branch/deployment/appservice/AppServiceDeploymentSettings.json"
     $row.filename = "AppServicePreDeploymentSettings.json"; $row.path = "$appServicePath"; $row.productName = "App Service Pre-Deployment JSON Configuration"; $Table.Rows.Add($row)
     # App Service Custom Script Extension
-    $row = $table.NewRow(); $row.Uri = "https://raw.githubusercontent.com/mattmcspirit/azurestack/$branch/deployment/appservice/extension/CSE.zip"
+    $row = $table.NewRow(); $row.Uri = "https://raw.githubusercontent.com/rikhepworth/azurestack/$branch/deployment/appservice/extension/CSE.zip"
     $row.filename = "CSE.zip"; $row.path = "$extensionPath"; $row.productName = "App Service Custom Script Extension"; $Table.Rows.Add($row)
     
     # Grab the MSI/Exe packages to be installed
@@ -593,7 +594,7 @@ catch {
 $scriptStep = "POWERSHELLSCRIPTS"
 try {
     Write-CustomVerbose -Message "Downloading PowerShell scripts used for deployment" -ErrorAction Stop
-    $scriptBaseURI = "https://raw.githubusercontent.com/mattmcspirit/azurestack/$branch/deployment/powershell"
+    $scriptBaseURI = "https://raw.githubusercontent.com/rikhepworth/azurestack/$branch/deployment/powershell"
     $scriptArray = @()
     $scriptArray.Clear()
     $scriptArray = "AddAppServicePreReqs.ps1", "AddDBHosting.ps1", "AddDBSkuQuota.ps1", "AddGalleryItems.ps1", "AddImage.ps1", "AddVMExtensions.ps1", `

@@ -69,7 +69,7 @@ The ASDK Configurator will deploy a total of 12 additional virtual machines to s
 
 * **MySQL RP** - 2 VMs (RP VM, DB Host VM) = **5.5GB**
 * **SQL Server RP** - 2 VMs (RP VM, DB Host VM) = **5.5GB**
-* **App Service** - 7 VMs (File Server, SQL Host, Front End Scale Set, Shared Worker Tier, Publisher Scale Set, CN0-VM, Management Servers Scale Set) = **23GB**
+* **App Service** - 8 VMs (File Server, SQL Host, Front End Scale Set, Shared Worker Tier, Publisher Scale Set, CN0-VM, Management Servers Scale Set(2)) = **28GB**
 
 **Total with all RPs deployed = 34GB in addition to the core running Azure Stack ASDK VMs**
 
@@ -85,6 +85,13 @@ Offline/Disconnected Support
 * Do you want to download the 5GB+ of required dependencies (Ubuntu image, Database resource providers, App Service binaries, JSON files etc) in advance of running the script?
 
 If you answered **yes** to any of those, you can deploy the ConfigASDK in an offline/disconnected mode. To do so, you should **[read the offline/disconnected documentation.](</deployment/offline/README.md>)**
+
+Custom Region and External Domain Suffix
+------------
+* Support for customising Region and ExternalDomainSuffix aded by Rik Hepworth
+* $regionName and $externalDomainSuffix mirror equivalent parameters in DeploySingleNode.ps1 in the ASDK clouddeployment\setup folder
+**If you haven't hacked your ASDK deployment, DO NOT USE THESE!**
+
 
 Step by Step Guidance (for internet-connected ASDK)
 ------------

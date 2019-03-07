@@ -190,7 +190,23 @@ param (
     [String] $branch,
 
     # If you have older hardware that can't handle concurrent VM deployments, use this flag
-    [switch]$serialMode
+    [switch]$serialMode,
+
+	# Github Account to override Matt's repo for download
+	[Parameter(Mandatory = $false)]
+    [String] $gitHubAccount = 'rikhepworth',
+
+    # RegionName for if you need to override the default 'Local'
+    [parameter(Mandatory = $false)]
+    [string]$regionName = 'local',
+
+    # External Domain Suffix for if you need to override the default 'azurestack.external'
+    [parameter(Mandatory = $false)]
+    [string]$externalDomainSuffix = 'azurestack.external',
+
+	# Source path for cert overrides
+	[Parameter(Mandatory = $false)]
+    [string] $appServicesCertsFolder
 )
 
 $Global:VerbosePreference = "Continue"
@@ -658,9 +674,13 @@ catch {
     return
 }
 
-if (!$branch) {
-    $branch = "master"
-}
+# Validate Github branch exists - usually reserved for testing purposes
+if ($deploymentMode -eq "Online") {
+    try {
+        if (!$branch) {
+            $branch = "master"
+        }
+        $urlToTest = "https://raw.githubusercontent.com/$gitHubAccount/azurestack/$branch/README.md"
 
 # Validate Github branch exists - usually reserved for testing purposes
 if ($deploymentMode -eq "Online") {
@@ -1187,8 +1207,8 @@ if (!$configAsdkSqlTableExists) {
         Registration         = "Incomplete";
         UbuntuServerImage    = "Incomplete";
         WindowsUpdates       = "Incomplete";
-        ServerCoreImage      = "Incomplete";
-        ServerFullImage      = "Incomplete";
+        ServerCore2016Image  = "Incomplete";
+        ServerFull2016Image  = "Incomplete";
         MySQLGalleryItem     = "Incomplete";
         SQLServerGalleryItem = "Incomplete";
         AddVMExtensions      = "Incomplete";
@@ -1298,7 +1318,7 @@ if (($progressCheck -eq "Incomplete") -or ($progressCheck -eq "Failed")) {
         if ($deploymentMode -eq "Online") {
             # If this is an online deployment, pull down the PowerShell scripts from GitHub
             foreach ($script in $scriptArray) {
-                $scriptBaseURI = "https://raw.githubusercontent.com/mattmcspirit/azurestack/$branch/deployment/powershell"
+                $scriptBaseURI = "https://raw.githubusercontent.com/$gitHubAccount/azurestack/$branch/deployment/powershell"
                 $scriptDownloadPath = "$scriptPath\$script"
                 DownloadWithRetry -downloadURI "$scriptBaseURI/$script" -downloadLocation $scriptDownloadPath -retries 10
             }
@@ -1474,7 +1494,7 @@ Import-Module -Name AzureRM.Storage -RequiredVersion 5.0.4 -Verbose
 $scriptStep = "TEST LOGINS"
 # Register an AzureRM environment that targets your administrative Azure Stack instance
 Write-CustomVerbose -Message "ASDK Configurator will now test all logins"
-$ArmEndpoint = "https://adminmanagement.local.azurestack.external"
+$ArmEndpoint = "https://adminmanagement.$regionName.$externalDomainSuffix"
 Add-AzureRMEnvironment -Name "AzureStackAdmin" -ArmEndpoint "$ArmEndpoint" -ErrorAction Stop
 $ADauth = (Get-AzureRmEnvironment -Name "AzureStackAdmin").ActiveDirectoryAuthority.TrimEnd('/')
 
@@ -1492,7 +1512,7 @@ if ($authenticationType.ToString() -like "AzureAd") {
         ### TEST AZURE STACK LOGIN - Login to Azure Stack
         Write-CustomVerbose -Message "Testing Azure Stack login with Azure Active Directory"
         Write-CustomVerbose -Message "Logging into the Default Provider Subscription with your Azure Stack Administrator Account used with Azure Active Directory"
-        $ArmEndpoint = "https://adminmanagement.local.azurestack.external"
+        $ArmEndpoint = "https://adminmanagement.$regionName.$externalDomainSuffix"
         Add-AzureRMEnvironment -Name "AzureStackAdmin" -ArmEndpoint "$ArmEndpoint" -ErrorAction Stop
         $testAzureSub = Add-AzureRmAccount -EnvironmentName "AzureStackAdmin" -TenantId $tenantID -Subscription "Default Provider Subscription" -Credential $asdkCreds -ErrorAction Stop
         $testAzureSub = $testAzureSub | Out-String
@@ -1513,7 +1533,7 @@ elseif ($authenticationType.ToString() -like "ADFS") {
         Write-CustomVerbose -Message "Getting Tenant ID for Login to Azure Stack"
         $tenantId = (invoke-restmethod "$($ADauth)/.well-known/openid-configuration").issuer.TrimEnd('/').Split('/')[-1]
         Write-CustomVerbose -Message "Logging in with your Azure Stack Administrator Account used with ADFS"
-        $ArmEndpoint = "https://adminmanagement.local.azurestack.external"
+        $ArmEndpoint = "https://adminmanagement.$regionName.$externalDomainSuffix"
         Add-AzureRMEnvironment -Name "AzureStackAdmin" -ArmEndpoint "$ArmEndpoint" -ErrorAction Stop
         $testAzureSub = Add-AzureRmAccount -EnvironmentName "AzureStackAdmin" -TenantId $tenantID -Subscription "Default Provider Subscription" -Credential $asdkCreds -ErrorAction Stop
         $testAzureSub = $testAzureSub | Out-String
@@ -1683,7 +1703,7 @@ if ($registerASDK -and ($deploymentMode -ne "Offline")) {
         try {
             Write-CustomVerbose -Message "Starting Azure Stack registration to Azure"
             # Add the Azure cloud subscription environment name. Supported environment names are AzureCloud or, if using a China Azure Subscription, AzureChinaCloud.
-            $ArmEndpoint = "https://adminmanagement.local.azurestack.external"
+            $ArmEndpoint = "https://adminmanagement.$regionName.$externalDomainSuffix"
             Add-AzureRMEnvironment -Name "AzureStackAdmin" -ArmEndpoint "$ArmEndpoint" -ErrorAction Stop
             $ADauth = (Get-AzureRmEnvironment -Name "AzureStackAdmin").ActiveDirectoryAuthority.TrimEnd('/')
             $tenantId = (Invoke-RestMethod "$($ADauth)/$($azureDirectoryTenantName)/.well-known/openid-configuration").issuer.TrimEnd('/').Split('/')[-1]
@@ -1746,7 +1766,7 @@ if ($authenticationType.ToString() -like "AzureAd") {
     Write-CustomVerbose -Message "Logging into the Default Provider Subscription with your Azure Stack Administrator Account used with Azure Active Directory"
     $ADauth = (Get-AzureRmEnvironment -Name "AzureStackAdmin").ActiveDirectoryAuthority.TrimEnd('/')
     $tenantId = (Invoke-RestMethod "$($ADauth)/$($azureDirectoryTenantName)/.well-known/openid-configuration").issuer.TrimEnd('/').Split('/')[-1]
-    $ArmEndpoint = "https://adminmanagement.local.azurestack.external"
+    $ArmEndpoint = "https://adminmanagement.$regionName.$externalDomainSuffix"
     Add-AzureRMEnvironment -Name "AzureStackAdmin" -ArmEndpoint "$ArmEndpoint" -ErrorAction Stop
     Add-AzureRmAccount -EnvironmentName "AzureStackAdmin" -TenantId $tenantID -Subscription "Default Provider Subscription" -Credential $asdkCreds -ErrorAction Stop
 }
@@ -1756,7 +1776,7 @@ elseif ($authenticationType.ToString() -like "ADFS") {
     $ADauth = (Get-AzureRmEnvironment -Name "AzureStackAdmin").ActiveDirectoryAuthority.TrimEnd('/')
     $tenantId = (Invoke-RestMethod "$($ADauth)/.well-known/openid-configuration").issuer.TrimEnd('/').Split('/')[-1]
     Write-CustomVerbose -Message "Logging in with your Azure Stack Administrator Account used with ADFS"
-    $ArmEndpoint = "https://adminmanagement.local.azurestack.external"
+    $ArmEndpoint = "https://adminmanagement.$regionName.$externalDomainSuffix"
     Add-AzureRMEnvironment -Name "AzureStackAdmin" -ArmEndpoint "$ArmEndpoint" -ErrorAction Stop
     Add-AzureRmAccount -EnvironmentName "AzureStackAdmin" -TenantId $tenantID -Subscription "Default Provider Subscription" -Credential $asdkCreds -ErrorAction Stop
 }
@@ -1842,12 +1862,14 @@ elseif ($freeCSVSpace -ge 115) {
 $jobName = "AddUbuntuImage"
 $AddUbuntuImage = {
     Start-Job -Name AddUbuntuImage -InitializationScript $export_functions -ArgumentList $ISOpath, $ASDKpath, $azsLocation, $registerASDK, $deploymentMode, $modulePath, `
-        $azureRegSubId, $azureRegTenantID, $tenantID, $azureRegCreds, $asdkCreds, $ScriptLocation, $branch, $sqlServerInstance, $databaseName, $tableName -ScriptBlock {
-        Set-Location $Using:ScriptLocation; .\Scripts\AddImage.ps1 -ASDKpath $Using:ASDKpath `
+    $azureRegSubId, $azureRegTenantID, $tenantID, $azureRegCreds, $asdkCreds, $ScriptLocation, $branch, $sqlServerInstance, $databaseName, $tableName, $regionName, `
+    $externalDomainSuffix, $gitHubAccount -ScriptBlock {
+    Set-Location $Using:ScriptLocation; .\Scripts\AddImage.ps1 -ASDKpath $Using:ASDKpath `
             -azsLocation $Using:azsLocation -registerASDK $Using:registerASDK -deploymentMode $Using:deploymentMode -modulePath $Using:modulePath `
             -azureRegSubId $Using:azureRegSubId -azureRegTenantID $Using:azureRegTenantID -tenantID $Using:TenantID -azureRegCreds $Using:azureRegCreds `
             -asdkCreds $Using:asdkCreds -ScriptLocation $Using:ScriptLocation -ISOpath $Using:ISOpath -image "UbuntuServer" -branch $Using:branch -runMode $Using:runMode `
-            -sqlServerInstance $Using:sqlServerInstance -databaseName $Using:databaseName -tableName $Using:tableName
+            -sqlServerInstance $Using:sqlServerInstance -databaseName $Using:databaseName -tableName $Using:tableName `
+            -regionName $Using:regionName -externalDomainSuffix $Using:externalDomainSuffix -gitHubAccount $Using:gitHubAccount
     } -Verbose -ErrorAction Stop
 }
 JobLauncher -jobName $jobName -jobToExecute $AddUbuntuImage -Verbose
@@ -1855,40 +1877,46 @@ JobLauncher -jobName $jobName -jobToExecute $AddUbuntuImage -Verbose
 $jobName = "DownloadWindowsUpdates"
 $DownloadWindowsUpdates = {
     Start-Job -Name DownloadWindowsUpdates -InitializationScript $export_functions -ArgumentList $ISOpath, $ASDKpath, $azsLocation, `
-        $deploymentMode, $tenantID, $asdkCreds, $ScriptLocation, $sqlServerInstance, $databaseName, $tableName -ScriptBlock {
-        Set-Location $Using:ScriptLocation; .\Scripts\DownloadWinUpdates.ps1 -ISOpath $Using:ISOpath -ASDKpath $Using:ASDKpath `
+    $deploymentMode, $tenantID, $asdkCreds, $ScriptLocation, $sqlServerInstance, $databaseName, $tableName, $regionName, `
+    $externalDomainSuffix  -ScriptBlock {
+    Set-Location $Using:ScriptLocation; .\Scripts\DownloadWinUpdates.ps1 -ISOpath $Using:ISOpath -ASDKpath $Using:ASDKpath `
             -azsLocation $Using:azsLocation -deploymentMode $Using:deploymentMode -tenantID $Using:TenantID -asdkCreds $Using:asdkCreds `
-            -sqlServerInstance $Using:sqlServerInstance -databaseName $Using:databaseName -tableName $Using:tableName -ScriptLocation $Using:ScriptLocation
+            -sqlServerInstance $Using:sqlServerInstance -databaseName $Using:databaseName -tableName $Using:tableName -ScriptLocation $Using:ScriptLocation `
+            -regionName $Using:regionName -externalDomainSuffix $Using:externalDomainSuffix
     } -Verbose -ErrorAction Stop
 }
 JobLauncher -jobName $jobName -jobToExecute $DownloadWindowsUpdates -Verbose
 
-$jobName = "AddServerCoreImage"
-$AddServerCoreImage = {
-    Start-Job -Name AddServerCoreImage -InitializationScript $export_functions -ArgumentList $ASDKpath, $azsLocation, $registerASDK, $deploymentMode, `
-        $modulePath, $azureRegSubId, $azureRegTenantID, $tenantID, $azureRegCreds, $asdkCreds, $ScriptLocation, $runMode, $ISOpath, $branch, `
-        $sqlServerInstance, $databaseName, $tableName -ScriptBlock {
+$jobName = "AddServerCore2016Image"
+$AddServerCore2016Image = {
+    Start-Job -Name AddServerCore2016Image -InitializationScript $export_functions -ArgumentList $ASDKpath, $azsLocation, $registerASDK, $deploymentMode, `
+        $modulePath, $azureRegSubId, $azureRegTenantID, $tenantID, $azureRegCreds, $asdkCreds, $ScriptLocation, $runMode, $ISOpath, $ISOPath2019, $branch, `
+        $sqlServerInstance, $databaseName, $tableName, $regionName, ` 
+        $externalDomainSuffix, $gitHubAccount -ScriptBlock {
         Set-Location $Using:ScriptLocation; .\Scripts\AddImage.ps1 -ASDKpath $Using:ASDKpath -azsLocation $Using:azsLocation -registerASDK $Using:registerASDK `
             -deploymentMode $Using:deploymentMode -modulePath $Using:modulePath -azureRegSubId $Using:azureRegSubId -azureRegTenantID $Using:azureRegTenantID `
             -tenantID $Using:TenantID -azureRegCreds $Using:azureRegCreds -asdkCreds $Using:asdkCreds -ScriptLocation $Using:ScriptLocation -ISOpath $Using:ISOpath `
-            -image "ServerCore" -branch $Using:branch -sqlServerInstance $Using:sqlServerInstance -databaseName $Using:databaseName -tableName $Using:tableName -runMode $Using:runMode
+            -image "ServerCore2016" -branch $Using:branch -sqlServerInstance $Using:sqlServerInstance -databaseName $Using:databaseName -tableName $Using:tableName -runMode $Using:runMode `
+            -regionName $Using:regionName -externalDomainSuffix $Using:externalDomainSuffix -gitHubAccount $Using:gitHubAccount
     } -Verbose -ErrorAction Stop
 }
-JobLauncher -jobName $jobName -jobToExecute $AddServerCoreImage -Verbose
+JobLauncher -jobName $jobName -jobToExecute $AddServerCore2016Image -Verbose
 
-$jobName = "AddServerFullImage"
-$AddServerFullImage = {
-    Start-Job -Name AddServerFullImage -InitializationScript $export_functions -ArgumentList $ASDKpath, $azsLocation, `
+$jobName = "AddServerFull2016Image"
+$AddServerFull2016Image = {
+    Start-Job -Name AddServerFull2016Image -InitializationScript $export_functions -ArgumentList $ASDKpath, $azsLocation, `
         $registerASDK, $deploymentMode, $modulePath, $azureRegSubId, $azureRegTenantID, $tenantID, $azureRegCreds, $asdkCreds, $ScriptLocation, `
-        $runMode, $ISOpath, $branch, $sqlServerInstance, $databaseName, $tableName -ScriptBlock {
+        $runMode, $ISOpath, $ISOPath2019, $branch, $sqlServerInstance, $databaseName, $tableName, $regionName, ` 
+        $externalDomainSuffix, $gitHubAccount -ScriptBlock {
         Set-Location $Using:ScriptLocation; .\Scripts\AddImage.ps1 -ASDKpath $Using:ASDKpath `
             -azsLocation $Using:azsLocation -registerASDK $Using:registerASDK -deploymentMode $Using:deploymentMode -modulePath $Using:modulePath `
             -azureRegSubId $Using:azureRegSubId -azureRegTenantID $Using:azureRegTenantID -tenantID $Using:TenantID -azureRegCreds $Using:azureRegCreds `
-            -asdkCreds $Using:asdkCreds -ScriptLocation $Using:ScriptLocation -ISOpath $Using:ISOpath -image "ServerFull" -branch $Using:branch `
-            -sqlServerInstance $Using:sqlServerInstance -databaseName $Using:databaseName -tableName $Using:tableName -runMode $Using:runMode
+            -asdkCreds $Using:asdkCreds -ScriptLocation $Using:ScriptLocation -ISOpath $Using:ISOpath -image "ServerFull2016" -branch $Using:branch `
+            -sqlServerInstance $Using:sqlServerInstance -databaseName $Using:databaseName -tableName $Using:tableName -runMode $Using:runMode `
+            -regionName $Using:regionName -externalDomainSuffix $Using:externalDomainSuffix -gitHubAccount $Using:gitHubAccount
     } -Verbose -ErrorAction Stop
 }
-JobLauncher -jobName $jobName -jobToExecute $AddServerFullImage -Verbose
+JobLauncher -jobName $jobName -jobToExecute $AddServerFull2016Image -Verbose
 
 ### ADD DB GALLERY ITEMS - JOB SETUP #########################################################################################################################
 ##############################################################################################################################################################
@@ -1900,7 +1928,8 @@ $AddMySQLAzpkg = {
         $branch, $sqlServerInstance, $databaseName, $tableName -ScriptBlock {
         Set-Location $Using:ScriptLocation; .\Scripts\AddGalleryItems.ps1 -ASDKpath $Using:ASDKpath -azsLocation $Using:azsLocation `
             -deploymentMode $Using:deploymentMode -tenantID $Using:TenantID -asdkCreds $Using:asdkCreds -ScriptLocation $Using:ScriptLocation -branch $Using:branch `
-            -azpkg "MySQL" -sqlServerInstance $Using:sqlServerInstance -databaseName $Using:databaseName -tableName $Using:tableName
+            -azpkg "MySQL" -sqlServerInstance $Using:sqlServerInstance -databaseName $Using:databaseName -tableName $Using:tableName `
+			-regionName $Using:regionName -externalDomainSuffix $Using:externalDomainSuffix -gitHubAccount $Using:gitHubAccount
     } -Verbose -ErrorAction Stop
 }
 JobLauncher -jobName $jobName -jobToExecute $AddMySQLAzpkg -Verbose
@@ -1911,7 +1940,8 @@ $AddSQLServerAzpkg = {
         $branch, $sqlServerInstance, $databaseName, $tableName -ScriptBlock {
         Set-Location $Using:ScriptLocation; .\Scripts\AddGalleryItems.ps1 -ASDKpath $Using:ASDKpath -azsLocation $Using:azsLocation `
             -deploymentMode $Using:deploymentMode -tenantID $Using:TenantID -asdkCreds $Using:asdkCreds -ScriptLocation $Using:ScriptLocation -branch $Using:branch `
-            -azpkg "SQLServer" -sqlServerInstance $Using:sqlServerInstance -databaseName $Using:databaseName -tableName $Using:tableName
+            -azpkg "SQLServer" -sqlServerInstance $Using:sqlServerInstance -databaseName $Using:databaseName -tableName $Using:tableName `
+			-regionName $Using:regionName -externalDomainSuffix $Using:externalDomainSuffix -gitHubAccount $Using:gitHubAccount
     } -Verbose -ErrorAction Stop
 }
 JobLauncher -jobName $jobName -jobToExecute $AddSQLServerAzpkg -Verbose
@@ -1925,7 +1955,8 @@ $AddVMExtensions = {
         $sqlServerInstance, $databaseName, $tableName -ScriptBlock {
         Set-Location $Using:ScriptLocation; .\Scripts\AddVMExtensions.ps1 -deploymentMode $Using:deploymentMode -tenantID $Using:TenantID -asdkCreds $Using:asdkCreds `
             -ScriptLocation $Using:ScriptLocation -registerASDK $Using:registerASDK -sqlServerInstance $Using:sqlServerInstance -databaseName $Using:databaseName `
-            -tableName $Using:tableName
+            -tableName $Using:tableName `
+            -regionName $Using:regionName -externalDomainSuffix $Using:externalDomainSuffix
     } -Verbose -ErrorAction Stop
 }
 JobLauncher -jobName $jobName -jobToExecute $AddVMExtensions -Verbose
@@ -1991,7 +2022,8 @@ $UploadScripts = {
         $sqlServerInstance, $databaseName, $tableName -ScriptBlock {
         Set-Location $Using:ScriptLocation; .\Scripts\UploadScripts.ps1 -ASDKpath $Using:ASDKpath -tenantID $Using:TenantID -asdkCreds $Using:asdkCreds `
             -deploymentMode $Using:deploymentMode -azsLocation $Using:azsLocation -ScriptLocation $Using:ScriptLocation -sqlServerInstance $Using:sqlServerInstance `
-            -databaseName $Using:databaseName -tableName $Using:tableName
+            -databaseName $Using:databaseName -tableName $Using:tableName `
+            -regionName $Using:regionName -externalDomainSuffix $Using:externalDomainSuffix
     } -Verbose -ErrorAction Stop
 }
 JobLauncher -jobName $jobName -jobToExecute $UploadScripts -Verbose
@@ -2007,7 +2039,8 @@ $DeployMySQLHost = {
             -downloadPath $Using:downloadPath -deploymentMode $Using:deploymentMode -vmType "MySQL" -tenantID $Using:TenantID `
             -secureVMpwd $Using:secureVMpwd -VMpwd $Using:VMpwd -asdkCreds $Using:asdkCreds -ScriptLocation $Using:ScriptLocation -azsLocation $Using:azsLocation `
             -skipMySQL $Using:skipMySQL -skipMSSQL $Using:skipMSSQL -skipAppService $Using:skipAppService -branch $Using:branch -sqlServerInstance $Using:sqlServerInstance `
-            -databaseName $Using:databaseName -tableName $Using:tableName -serialMode $Using:serialMode
+            -databaseName $Using:databaseName -tableName $Using:tableName -serialMode $Using:serialMode `
+            -regionName $Using:regionName -externalDomainSuffix $Using:externalDomainSuffix -gitHubAccount $Using:gitHubAccount
     } -Verbose -ErrorAction Stop
 }
 JobLauncher -jobName $jobName -jobToExecute $DeployMySQLHost -Verbose
@@ -2019,7 +2052,8 @@ $DeploySQLServerHost = {
         Set-Location $Using:ScriptLocation; .\Scripts\DeployVM.ps1 -ASDKpath $Using:ASDKpath -downloadPath $Using:downloadPath -deploymentMode $Using:deploymentMode `
             -vmType "SQLServer" -tenantID $Using:TenantID -secureVMpwd $Using:secureVMpwd -VMpwd $Using:VMpwd -asdkCreds $Using:asdkCreds `
             -ScriptLocation $Using:ScriptLocation -azsLocation $Using:azsLocation -skipMySQL $Using:skipMySQL -skipMSSQL $Using:skipMSSQL `
-            -skipAppService $Using:skipAppService -branch $Using:branch -sqlServerInstance $Using:sqlServerInstance -databaseName $Using:databaseName -tableName $Using:tableName -serialMode $Using:serialMode
+            -skipAppService $Using:skipAppService -branch $Using:branch -sqlServerInstance $Using:sqlServerInstance -databaseName $Using:databaseName -tableName $Using:tableName -serialMode $Using:serialMode `
+            -regionName $Using:regionName -externalDomainSuffix $Using:externalDomainSuffix -gitHubAccount $Using:gitHubAccount
     } -Verbose -ErrorAction Stop
 }
 JobLauncher -jobName $jobName -jobToExecute $DeploySQLServerHost -Verbose
@@ -2033,7 +2067,8 @@ $AddMySQLHosting = {
         $asdkCreds, $ScriptLocation, $skipMySQL, $skipMSSQL, $branch, $sqlServerInstance, $databaseName, $tableName -ScriptBlock {
         Set-Location $Using:ScriptLocation; .\Scripts\AddDBHosting.ps1 -ASDKpath $Using:ASDKpath -deploymentMode $Using:deploymentMode -dbHost "MySQL" `
             -tenantID $Using:TenantID -secureVMpwd $Using:secureVMpwd -asdkCreds $Using:asdkCreds -ScriptLocation $Using:ScriptLocation -skipMySQL $Using:skipMySQL `
-            -skipMSSQL $Using:skipMSSQL -branch $Using:branch -sqlServerInstance $Using:sqlServerInstance -databaseName $Using:databaseName -tableName $Using:tableName
+            -skipMSSQL $Using:skipMSSQL -branch $Using:branch -sqlServerInstance $Using:sqlServerInstance -databaseName $Using:databaseName -tableName $Using:tableName `
+			-gitHubAccount $Using:gitHubAccount
     } -Verbose -ErrorAction Stop
 }
 JobLauncher -jobName $jobName -jobToExecute $AddMySQLHosting -Verbose
@@ -2059,7 +2094,8 @@ $DeployAppServiceFS = {
         Set-Location $Using:ScriptLocation; .\Scripts\DeployVM.ps1 -ASDKpath $Using:ASDKpath -downloadPath $Using:downloadPath -deploymentMode $Using:deploymentMode `
             -vmType "AppServiceFS" -tenantID $Using:TenantID -secureVMpwd $Using:secureVMpwd -VMpwd $Using:VMpwd -asdkCreds $Using:asdkCreds `
             -ScriptLocation $Using:ScriptLocation -azsLocation $Using:azsLocation -skipMySQL $Using:skipMySQL -skipMSSQL $Using:skipMSSQL -skipAppService $Using:skipAppService `
-            -branch $Using:branch -sqlServerInstance $Using:sqlServerInstance -databaseName $Using:databaseName -tableName $Using:tableName -serialMode $Using:serialMode
+            -branch $Using:branch -sqlServerInstance $Using:sqlServerInstance -databaseName $Using:databaseName -tableName $Using:tableName -serialMode $Using:serialMode `
+            -regionName $Using:regionName -externalDomainSuffix $Using:externalDomainSuffix -gitHubAccount $Using:gitHubAccount
     } -Verbose -ErrorAction Stop
 }
 JobLauncher -jobName $jobName -jobToExecute $DeployAppServiceFS -Verbose
@@ -2071,7 +2107,8 @@ $DeployAppServiceDB = {
         Set-Location $Using:ScriptLocation; .\Scripts\DeployVM.ps1 -ASDKpath $Using:ASDKpath -downloadPath $Using:downloadPath -deploymentMode $Using:deploymentMode `
             -vmType "AppServiceDB" -tenantID $Using:TenantID -secureVMpwd $Using:secureVMpwd -VMpwd $Using:VMpwd -asdkCreds $Using:asdkCreds `
             -ScriptLocation $Using:ScriptLocation -azsLocation $Using:azsLocation -skipMySQL $Using:skipMySQL -skipMSSQL $Using:skipMSSQL -skipAppService $Using:skipAppService `
-            -branch $Using:branch -sqlServerInstance $Using:sqlServerInstance -databaseName $Using:databaseName -tableName $Using:tableName -serialMode $Using:serialMode
+            -branch $Using:branch -sqlServerInstance $Using:sqlServerInstance -databaseName $Using:databaseName -tableName $Using:tableName -serialMode $Using:serialMode `
+            -regionName $Using:regionName -externalDomainSuffix $Using:externalDomainSuffix -gitHubAccount $Using:gitHubAccount
     } -Verbose -ErrorAction Stop
 }
 JobLauncher -jobName $jobName -jobToExecute $DeployAppServiceDB -Verbose
@@ -2095,7 +2132,8 @@ $AddAppServicePreReqs = {
             -downloadPath $Using:downloadPath -deploymentMode $Using:deploymentMode -authenticationType $Using:authenticationType `
             -azureDirectoryTenantName $Using:azureDirectoryTenantName -tenantID $Using:tenantID -secureVMpwd $Using:secureVMpwd -ERCSip $Using:ERCSip -branch $Using:branch `
             -asdkCreds $Using:asdkCreds -cloudAdminCreds $Using:cloudAdminCreds -ScriptLocation $Using:ScriptLocation -skipAppService $Using:skipAppService `
-            -sqlServerInstance $Using:sqlServerInstance -databaseName $Using:databaseName -tableName $Using:tableName
+            -sqlServerInstance $Using:sqlServerInstance -databaseName $Using:databaseName -tableName $Using:tableName `
+            -regionName $Using:regionName -externalDomainSuffix $Using:externalDomainSuffix -appServicesCertsFolder $Using:appServicesCertsFolder, -gitHubAccount $Using:gitHubAccount
     } -Verbose -ErrorAction Stop
 }
 JobLauncher -jobName $jobName -jobToExecute $AddAppServicePreReqs -Verbose
@@ -2107,7 +2145,8 @@ $DeployAppService = {
         Set-Location $Using:ScriptLocation; .\Scripts\DeployAppService.ps1 -ASDKpath $Using:ASDKpath -downloadPath $Using:downloadPath -deploymentMode $Using:deploymentMode `
             -authenticationType $Using:authenticationType -azureDirectoryTenantName $Using:azureDirectoryTenantName -tenantID $Using:tenantID -VMpwd $Using:VMpwd `
             -asdkCreds $Using:asdkCreds -ScriptLocation $Using:ScriptLocation -skipAppService $Using:skipAppService -branch $Using:branch `
-            -sqlServerInstance $Using:sqlServerInstance -databaseName $Using:databaseName -tableName $Using:tableName
+            -sqlServerInstance $Using:sqlServerInstance -databaseName $Using:databaseName -tableName $Using:tableName `
+            -regionName $Using:regionName -externalDomainSuffix $Using:externalDomainSuffix -gitHubAccount $Using:gitHubAccount
     } -Verbose -ErrorAction Stop
 }
 JobLauncher -jobName $jobName -jobToExecute $DeployAppService -Verbose
@@ -2157,7 +2196,7 @@ if (($progressCheck -eq "Incomplete") -or ($progressCheck -eq "Failed")) {
         # Configure a simple base plan and offer for IaaS
         Get-AzureRmContext -ListAvailable | Where-Object {$_.Environment -like "Azure*"} | Remove-AzureRmAccount | Out-Null
         Clear-AzureRmContext -Scope CurrentUser -Force
-        $ArmEndpoint = "https://adminmanagement.local.azurestack.external"
+        $ArmEndpoint = "https://adminmanagement.$regionName.$externalDomainSuffix"
         Add-AzureRMEnvironment -Name "AzureStackAdmin" -ArmEndpoint "$ArmEndpoint" -ErrorAction Stop
         Add-AzureRmAccount -EnvironmentName "AzureStackAdmin" -TenantId $tenantID -Credential $asdkCreds -ErrorAction Stop | Out-Null
         $sub = Get-AzureRmSubscription | Where-Object {$_.Name -eq "Default Provider Subscription"}
@@ -2265,7 +2304,7 @@ if (($progressCheck -eq "Incomplete") -or ($progressCheck -eq "Failed")) {
         Clear-AzureRmContext -Scope CurrentUser -Force
 
         # Log the user into the "AzureStackUser" environment
-        Add-AzureRMEnvironment -Name "AzureStackUser" -ArmEndpoint "https://management.local.azurestack.external"
+        Add-AzureRMEnvironment -Name "AzureStackUser" -ArmEndpoint "https://management.$regionName.$externalDomainSuffix"
         Add-AzureRmAccount -EnvironmentName "AzureStackUser" -TenantId $tenantID -Credential $asdkCreds -ErrorAction Stop | Out-Null
 
         # Register all the RPs for that user
@@ -2436,7 +2475,7 @@ elseif (!$skipCustomizeHost -and ($progressCheck -ne "Complete")) {
                     $env:Path = [System.Environment]::GetEnvironmentVariable("Path", "Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path", "User") 
                     # Set up the VM alias Endpoint for Azure CLI & Python
                     if ($deploymentMode -eq "Online") {
-                        $vmAliasEndpoint = "https://raw.githubusercontent.com/mattmcspirit/azurestack/$branch/deployment/packages/Aliases/aliases.json"
+                        $vmAliasEndpoint = "https://raw.githubusercontent.com/$gitHubAccount/azurestack/$branch/deployment/packages/Aliases/aliases.json"
                     }
                     elseif (($deploymentMode -eq "PartialOnline") -or ($deploymentMode -eq "Offline")) {
                         $item = Get-ChildItem -Path "$ASDKpath\images" -Recurse -Include ("aliases.json") -ErrorAction Stop
@@ -2447,7 +2486,7 @@ elseif (!$skipCustomizeHost -and ($progressCheck -ne "Complete")) {
                             try {
                                 # Log back into Azure Stack to ensure login hasn't timed out
                                 Write-CustomVerbose -Message "$itemName not found. Upload Attempt: $uploadItemAttempt"
-                                $ArmEndpoint = "https://adminmanagement.local.azurestack.external"
+                                $ArmEndpoint = "https://adminmanagement.$regionName.$externalDomainSuffix"
                                 Add-AzureRMEnvironment -Name "AzureStackAdmin" -ArmEndpoint "$ArmEndpoint" -ErrorAction Stop
                                 Add-AzureRmAccount -EnvironmentName "AzureStackAdmin" -TenantId $tenantID -Credential $asdkCreds -ErrorAction Stop | Out-Null
                                 Set-AzureStorageBlobContent -File "$itemFullPath" -Container $asdkOfflineContainerName -Blob $itemName -Context $asdkOfflineStorageAccount.Context -ErrorAction Stop | Out-Null
@@ -2464,9 +2503,9 @@ elseif (!$skipCustomizeHost -and ($progressCheck -ne "Complete")) {
                     Write-CustomVerbose -Message "Configuring your Azure CLI environment on the ASDK host, for Admin and User"
                     # Register AZ CLI environment for Admin
                     Write-CustomVerbose -Message "Configuring for AzureStackAdmin"
-                    az cloud register -n AzureStackAdmin --endpoint-resource-manager "https://adminmanagement.local.azurestack.external" --suffix-storage-endpoint "local.azurestack.external" --suffix-keyvault-dns ".adminvault.local.azurestack.external" --endpoint-vm-image-alias-doc $vmAliasEndpoint
+                    az cloud register -n AzureStackAdmin --endpoint-resource-manager $ArmEndpoint --suffix-storage-endpoint "$regionName.$externalDomainSuffix" --suffix-keyvault-dns ".adminvault.$regionName.$externalDomainSuffix" --endpoint-vm-image-alias-doc $vmAliasEndpoint
                     Write-CustomVerbose -Message "Configuring for AzureStackUser"
-                    az cloud register -n AzureStackUser --endpoint-resource-manager "https://management.local.azurestack.external" --suffix-storage-endpoint "local.azurestack.external" --suffix-keyvault-dns ".vault.local.azurestack.external" --endpoint-vm-image-alias-doc $vmAliasEndpoint
+                    az cloud register -n AzureStackUser --endpoint-resource-manager $ArmEndpoint --suffix-storage-endpoint "$regionName.$externalDomainSuffix" --suffix-keyvault-dns ".vault.$regionName.$externalDomainSuffix" --endpoint-vm-image-alias-doc $vmAliasEndpoint
                     Write-CustomVerbose -Message "Setting Azure CLI active environment to AzureStackAdmin"
                     # Set the active environment
                     az cloud set -n AzureStackAdmin
@@ -2541,7 +2580,7 @@ try {
         Write-Output "SQL Server Database Hosting VM Credentials = sqladmin | $VMpwd" >> $txtPath
     }
     if (!$skipAppService) {
-        $ArmEndpoint = "https://adminmanagement.local.azurestack.external"
+        $ArmEndpoint = "https://adminmanagement.$regionName.$externalDomainSuffix"
         Add-AzureRMEnvironment -Name "AzureStackAdmin" -ArmEndpoint "$ArmEndpoint" -ErrorAction Stop
         Add-AzureRmAccount -EnvironmentName "AzureStackAdmin" -TenantId $tenantID -Credential $asdkCreds -ErrorAction Stop | Out-Null
         $fileServerFqdn = (Get-AzureRmPublicIpAddress -Name "fileserver_ip" -ResourceGroupName "appservice-fileshare").DnsSettings.Fqdn
@@ -2556,23 +2595,23 @@ try {
         Write-Output "App Service SQL Server SA Credentials = sa | $VMpwd" >> $txtPath
         Write-Output "App Service Application Id: $identityApplicationID" >> $txtPath
         Write-Output "`r`nOther useful information for reference:" >> $txtPath
-        Write-Output "`r`nAzure Stack Admin ARM Endpoint: adminmanagement.local.azurestack.external" >> $txtPath
-        Write-Output "Azure Stack Tenant ARM Endpoint: management.local.azurestack.external" >> $txtPath
+        Write-Output "`r`nAzure Stack Admin ARM Endpoint: $ArmEndpoint" >> $txtPath
+        Write-Output "Azure Stack Tenant ARM Endpoint: $MgmtEndpoint" >> $txtPath
         Write-Output "Azure Directory Tenant Name: $azureDirectoryTenantName" >> $txtPath
-        Write-Output "File Share UNC Path: \\appservicefileshare.local.cloudapp.azurestack.external\websites" >> $txtPath
+        Write-Output "File Share UNC Path: \\appservicefileshare.$regionName.cloudapp.$externalDomainSuffix\websites" >> $txtPath
         Write-Output "File Share Owner: fileshareowner" >> $txtPath
         Write-Output "File Share Owner Password: $VMpwd" >> $txtPath
         Write-Output "File Share User: fileshareuser" >> $txtPath
         Write-Output "File Share User Password: $VMpwd" >> $txtPath
         Write-Output "Identity Application ID: $identityApplicationID" >> $txtPath
-        Write-Output "Identity Application Certificate file (*.pfx): $AppServicePath\sso.appservice.local.azurestack.external.pfx" >> $txtPath
+        Write-Output "Identity Application Certificate file (*.pfx): $AppServicePath\sso.appservice.$regionName.$externalDomainSuffix.pfx" >> $txtPath
         Write-Output "Identity Application Certificate (*.pfx) password: $VMpwd" >> $txtPath
         Write-Output "Azure Resource Manager (ARM) root certificate file (*.cer): $AppServicePath\AzureStackCertificationAuthority.cer" >> $txtPath
-        Write-Output "App Service default SSL certificate file (*.pfx): $AppServicePath\_.appservice.local.AzureStack.external.pfx" >> $txtPath
+        Write-Output "App Service default SSL certificate file (*.pfx): $AppServicePath\_.appservice.$regionName.$externalDomainSuffix.pfx" >> $txtPath
         Write-Output "App Service default SSL certificate (*.pfx) password: $VMpwd" >> $txtPath
-        Write-Output "App Service API SSL certificate file (*.pfx): $AppServicePath\api.appservice.local.AzureStack.external.pfx" >> $txtPath
+        Write-Output "App Service API SSL certificate file (*.pfx): $AppServicePath\api.appservice.$regionName.$externalDomainSuffix.pfx" >> $txtPath
         Write-Output "App Service API SSL certificate (*.pfx) password: $VMpwd" >> $txtPath
-        Write-Output "App Service Publisher SSL certificate file (*.pfx): $AppServicePath\ftp.appservice.local.AzureStack.external.pfx" >> $txtPath
+        Write-Output "App Service Publisher SSL certificate file (*.pfx): $AppServicePath\ftp.appservice.$regionName.$externalDomainSuffix.pfx" >> $txtPath
         Write-Output "App Service Publisher SSL certificate (*.pfx) password: $VMpwd" >> $txtPath
         Write-Output "SQL Server Name: $sqlAppServerFqdn" >> $txtPath
         Write-Output "SQL sysadmin login: sa" >> $txtPath
@@ -2652,7 +2691,7 @@ if ($scriptSuccess) {
         $i++
     }
     Write-CustomVerbose -Message "Cleaning up Resource Group used for Image Upload"
-    $ArmEndpoint = "https://adminmanagement.local.azurestack.external"
+    $ArmEndpoint = "https://adminmanagement.$regionName.$externalDomainSuffix"
     Add-AzureRMEnvironment -Name "AzureStackAdmin" -ArmEndpoint "$ArmEndpoint" -ErrorAction Stop
     Add-AzureRmAccount -EnvironmentName "AzureStackAdmin" -TenantId $tenantID -Credential $asdkCreds -ErrorAction Stop | Out-Null
     $asdkImagesRGName = "azurestack-images"
@@ -2660,7 +2699,7 @@ if ($scriptSuccess) {
 
     # Create desktop icons
     $shortcut_name = "Azure Stack Admin Portal" 
-    $shortcut_target = "https://adminportal.local.azurestack.external" 
+    $shortcut_target = "https://adminportal.$regionName.$externalDomainSuffix" 
     $sh = new-object -com "WScript.Shell" 
     $p = $sh.SpecialFolders.item("AllUsersDesktop") 
     $lnk = $sh.CreateShortcut( (join-path $p $shortcut_name) + ".lnk" ) 
@@ -2669,7 +2708,7 @@ if ($scriptSuccess) {
     $lnk.Save()
     
     $shortcut_name = "Azure Stack User Portal" 
-    $shortcut_target = "https://portal.local.azurestack.external" 
+    $shortcut_target = "https://portal.$regionName.$externalDomainSuffix" 
     $sh = new-object -com "WScript.Shell" 
     $p = $sh.SpecialFolders.item("AllUsersDesktop") 
     $lnk = $sh.CreateShortcut( (join-path $p $shortcut_name) + ".lnk" ) 
