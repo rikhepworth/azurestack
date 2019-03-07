@@ -157,9 +157,9 @@ if (($progressCheck -eq "Incomplete") -or ($progressCheck -eq "Failed")) {
         Clear-AzureRmContext -Scope CurrentUser -Force
         Disable-AzureRMContextAutosave -Scope CurrentUser
 
-        #Write-Host "Importing storage modules"
-        #Import-Module -Name Azure.Storage -RequiredVersion 4.5.0
-        #Import-Module -Name AzureRM.Storage -RequiredVersion 5.0.4
+        Write-Host "Importing storage modules"
+        Import-Module -Name Azure.Storage -RequiredVersion 4.5.0
+        Import-Module -Name AzureRM.Storage -RequiredVersion 5.0.4
 
         # Need to confirm if Windows Update stage previously completed
         if ($image -ne "UbuntuServer") {
@@ -442,6 +442,7 @@ if (($progressCheck -eq "Incomplete") -or ($progressCheck -eq "Failed")) {
                 # Get download information for Ubuntu Server 16.04 LTS VHD file
                 $azpkg.vhdPath = $downloadDetails.properties.osDiskImage.sourceBlobSasUri
                 $azpkg.vhdVersion = $downloadDetails.properties.version
+                #$azpkg.vhdVersion = "16.04.20180831"
             }
         }
         elseif ($image -like "*2019") {
@@ -693,7 +694,7 @@ if (($progressCheck -eq "Incomplete") -or ($progressCheck -eq "Failed")) {
                             $azCopyPath = "C:\Program Files (x86)\Microsoft SDKs\Azure\AzCopy\AzCopy.exe"
                             $storageAccountKey = (Get-AzureRmStorageAccountKey -ResourceGroupName $asdkImagesRGName -Name $asdkImagesStorageAccountName).Value[0]
                             $azCopyCmd = [string]::Format("""{0}"" /source:""{1}"" /dest:""{2}"" /destkey:""{3}"" /BlobType:""page"" /Pattern:""{4}"" /Y /V:""{5}"" /Z:""{6}""", $azCopyPath, $serverVHDDirectory, $containerDestination, $storageAccountKey, $blobName, $azCopyLogPath, $journalPath)
-                            Write-Host "Executing the following command:`n'n$azCopyCmd"
+                            Write-Host "Executing the following command:`n$azCopyCmd"
                             $result = cmd /c $azCopyCmd
                             foreach ($s in $result) {
                                 Write-Host $s

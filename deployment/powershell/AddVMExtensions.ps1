@@ -49,7 +49,12 @@ $logPath = "$ScriptLocation\Logs\$logDate\$logFolder"
 ### START LOGGING ###
 $runTime = $(Get-Date).ToString("MMdd-HHmmss")
 $fullLogPath = "$logPath\$($logName)$runTime.txt"
-Start-Transcript -Path "$fullLogPath" -Append -IncludeInvocationHeader
+Start-Transcript -Path "$fullLogPath" -Append
+Write-Host "Creating log folder"
+Write-Host "Log folder has been created at $logPath"
+Write-Host "Log file stored at $fullLogPath"
+Write-Host "Starting logging"
+Write-Host "Log started at $runTime"
 
 $progressStage = $progressName
 $progressCheck = CheckProgress -progressStage $progressStage
@@ -61,12 +66,14 @@ if (($registerASDK -eq $true) -and ($deploymentMode -ne "Offline")) {
                 StageReset -progressStage $progressStage
             }
 
+            Write-Host "Clearing previous Azure/Azure Stack logins"
             Get-AzureRmContext -ListAvailable | Where-Object {$_.Environment -like "Azure*"} | Remove-AzureRmAccount | Out-Null
             Clear-AzureRmContext -Scope CurrentUser -Force
             Disable-AzureRMContextAutosave -Scope CurrentUser
 
-            Import-Module -Name Azure.Storage -RequiredVersion 4.5.0 -Verbose
-            Import-Module -Name AzureRM.Storage -RequiredVersion 5.0.4 -Verbose
+            Write-Host "Importing Azure.Storage and AzureRM.Storage modules"
+            Import-Module -Name Azure.Storage -RequiredVersion 4.5.0
+            Import-Module -Name AzureRM.Storage -RequiredVersion 5.0.4
 
             # Currently an infinite loop bug exists in Azs.AzureBridge.Admin 0.1.1 - this section fixes it by editing the Get-TaskResult.ps1 file
             if (!(Get-Module -Name Azs.AzureBridge.Admin)) {
@@ -92,11 +99,13 @@ if (($registerASDK -eq $true) -and ($deploymentMode -ne "Offline")) {
                     }
                 }
             }
+            Write-Host "Logging into Azure Stack"
             $ArmEndpoint = "https://adminmanagement.$regionName.$externalDomainSuffix"
             Add-AzureRmEnvironment -Name "AzureStackAdmin" -ArmEndpoint "$ArmEndpoint" -ErrorAction Stop
             Add-AzureRmAccount -EnvironmentName "AzureStackAdmin" -TenantId $tenantID -Credential $asdkCreds -ErrorAction Stop | Out-Null
             $activationName = "default"
             $activationRG = "azurestack-activation"
+            Write-Host "Checking if Azure Stack is activated and successfully registered"
             if ($(Get-AzsAzureBridgeActivation -Name $activationName -ResourceGroupName $activationRG -ErrorAction SilentlyContinue -Verbose)) {
                 Write-Host "Adding Microsoft VM Extensions from the from the Azure Stack Marketplace"
                 $getExtensions = ((Get-AzsAzureBridgeProduct -ActivationName $activationName -ResourceGroupName $activationRG -ErrorAction SilentlyContinue -Verbose | Where-Object {($_.ProductKind -eq "virtualMachineExtension") -and ($_.Name -like "*microsoft*")}).Name) -replace "default/", ""
@@ -143,4 +152,5 @@ elseif ($registerASDK -eq $false) {
     StageSkipped -progressStage $progressStage
 }
 Set-Location $ScriptLocation
+Write-Host "Logging stopped at $endTime"
 Stop-Transcript -ErrorAction SilentlyContinue

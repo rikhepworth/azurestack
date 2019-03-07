@@ -76,9 +76,9 @@ if (($progressCheck -eq "Incomplete") -or ($progressCheck -eq "Failed")) {
         Clear-AzureRmContext -Scope CurrentUser -Force
         Disable-AzureRMContextAutosave -Scope CurrentUser
 
-        #Write-Host "Importing Azure.Storage and AzureRM.Storage modules"
-        #Import-Module -Name Azure.Storage -RequiredVersion 4.5.0
-        #Import-Module -Name AzureRM.Storage -RequiredVersion 5.0.4
+        Write-Host "Importing Azure.Storage and AzureRM.Storage modules"
+        Import-Module -Name Azure.Storage -RequiredVersion 4.5.0
+        Import-Module -Name AzureRM.Storage -RequiredVersion 5.0.4
         
         # Log into Azure Stack to check for existing images and push new ones if required ###
         Write-Host "Logging into Azure Stack to check if images are required, and therefore if updates need downloading"
@@ -222,6 +222,11 @@ if (($progressCheck -eq "Incomplete") -or ($progressCheck -eq "Failed")) {
                     $kbDownloads += "$kbIDs"
 
                     if ($v -eq "2019") {
+                        # Bypass Internet Explorer Setup Popup
+                        $keyPath = 'Registry::HKEY_LOCAL_MACHINE\Software\Policies\Microsoft\Internet Explorer\Main'
+                        if (!(Test-Path $keyPath)) { New-Item $keyPath -Force }
+                        Set-ItemProperty -Path $keyPath -Name "DisableFirstRunCustomize" -Value 1
+
                         ## .NET CU Download ####
                         # Find the KB Article Number for the latest .NET on Windows Server 2019 (Build 17763) Cumulative Update
                         Write-Host "This is a Windows Server 2019 image, so we will download the latest .NET update for the image"

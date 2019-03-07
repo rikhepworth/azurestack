@@ -56,7 +56,7 @@ param (
     [String] $gitHubAccount = 'rikhepworth'
 )
 
-$Global:VerbosePreference = "Continue"
+#$Global:VerbosePreference = "Continue"
 $Global:ErrorActionPreference = 'Stop'
 $Global:ProgressPreference = 'SilentlyContinue'
 
@@ -70,9 +70,15 @@ New-Item -ItemType Directory -Path "$ScriptLocation\Logs\$logDate\$logFolder" -F
 $logPath = "$ScriptLocation\Logs\$logDate\$logFolder"
 
 ### START LOGGING ###
+Write-Host "Starting logging"
 $runTime = $(Get-Date).ToString("MMdd-HHmmss")
 $fullLogPath = "$logPath\$($logName)$runTime.txt"
-Start-Transcript -Path "$fullLogPath" -Append -IncludeInvocationHeader
+Start-Transcript -Path "$fullLogPath" -Append
+Write-Host "Creating log folder"
+Write-Host "Log folder has been created at $logPath"
+Write-Host "Log file stored at $fullLogPath"
+Write-Host "Starting logging"
+Write-Host "Log started at $runTime"
 
 $progressStage = $progressName
 $progressCheck = CheckProgress -progressStage $progressStage
@@ -96,12 +102,14 @@ elseif (($skipAppService -eq $false) -and ($progressCheck -ne "Complete")) {
                 $progressCheck = CheckProgress -progressStage $progressStage
             }
 
+            Write-Host "Clearing previous Azure/Azure Stack logins"
             Get-AzureRmContext -ListAvailable | Where-Object {$_.Environment -like "Azure*"} | Remove-AzureRmAccount | Out-Null
             Clear-AzureRmContext -Scope CurrentUser -Force
             Disable-AzureRMContextAutosave -Scope CurrentUser
 
-            Import-Module -Name Azure.Storage -RequiredVersion 4.5.0 -Verbose
-            Import-Module -Name AzureRM.Storage -RequiredVersion 5.0.4 -Verbose
+            Write-Host "Importing Azure.Storage and AzureRM.Storage modules"
+            Import-Module -Name Azure.Storage -RequiredVersion 4.5.0
+            Import-Module -Name AzureRM.Storage -RequiredVersion 5.0.4
 
             # Need to ensure this stage doesn't start before the App Service components have been downloaded
             $appServicePreReqJobCheck = CheckProgress -progressStage "AddAppServicePreReqs"
@@ -133,13 +141,19 @@ elseif (($skipAppService -eq $false) -and ($progressCheck -ne "Complete")) {
                     throw "The AppServiceSQLServer stage of the process has failed. This should fully complete before the App Service deployment can be started. Check the AppServiceSQLServer log, ensure that step is completed first, and rerun."
                 }
             }
+            Write-Host "Logging into Azure Stack"
             # Login to Azure Stack to grab FQDNs and also Identity App ID locally
             $ArmEndpoint = "https://adminmanagement.$regionName.$externalDomainSuffix"
             Add-AzureRMEnvironment -Name "AzureStackAdmin" -ArmEndpoint "$ArmEndpoint" -ErrorAction Stop
             Add-AzureRmAccount -EnvironmentName "AzureStackAdmin" -TenantId $tenantID -Credential $asdkCreds -ErrorAction Stop | Out-Null
+            Write-Host "Getting File Server and SQL App Server FQDN"
             $fileServerFqdn = (Get-AzureRmPublicIpAddress -Name "fileserver_ip" -ResourceGroupName "appservice-fileshare").DnsSettings.Fqdn
             $sqlAppServerFqdn = (Get-AzureRmPublicIpAddress -Name "sqlapp_ip" -ResourceGroupName "appservice-sql").DnsSettings.Fqdn
+            Write-Host "Getting Application ID"
             $identityApplicationID = Get-Content -Path "$downloadPath\ApplicationIDBackup.txt" -ErrorAction SilentlyContinue
+            Write-Host "File Server is at: $fileServerFqdn"
+            Write-Host "SQL for App Service is at: $sqlAppServerFqdn"
+            Write-Host "Identity Application ID is: $identityApplicationID"
 
             Write-Host "Checking variables are present before creating JSON"
             # Check Variables #
@@ -182,6 +196,7 @@ elseif (($skipAppService -eq $false) -and ($progressCheck -ne "Complete")) {
 
             # Pull the pre-deployment JSON file from online, or the local zip file.
             if ($deploymentMode -eq "Online") {
+                Write-Host "Downloading the AppServiceDeploymentSettings.json file from GitHub"
                 $appServiceJsonURI = "https://raw.githubusercontent.com/$gitHubAccount/azurestack/$branch/deployment/appservice/AppServiceDeploymentSettings.json"
                 $appServiceJsonDownloadLocation = "$AppServicePath\AppServicePreDeploymentSettings.json"
                 DownloadWithRetry -downloadURI "$appServiceJsonURI" -downloadLocation "$appServiceJsonDownloadLocation" -retries 10
@@ -197,6 +212,7 @@ elseif (($skipAppService -eq $false) -and ($progressCheck -ne "Complete")) {
             $JsonConfig = Get-Content -Path "$AppServicePath\AppServicePreDeploymentSettings.json"
             # Edit the JSON from deployment
 
+            Write-Host "Starting editing the JSON file"
             if ($authenticationType.ToString() -like "AzureAd") {
                 $JsonConfig = $JsonConfig.Replace("<<AzureDirectoryTenantName>>", $azureDirectoryTenantName)
             }
@@ -233,6 +249,7 @@ elseif (($skipAppService -eq $false) -and ($progressCheck -ne "Complete")) {
             }
 
             # Check if there is a previous failure for the App Service deployment - easier to completely clean the RG and start fresh
+            Write-Host "Logging back into Azure Stack"
             $azsLocation = (Get-AzsLocation).Name
             $ArmEndpoint = "https://adminmanagement.$regionName.$externalDomainSuffix"
             Add-AzureRMEnvironment -Name "AzureStackAdmin" -ArmEndpoint "$ArmEndpoint" -ErrorAction Stop
@@ -309,4 +326,5 @@ elseif ($skipAppService -and ($progressCheck -ne "Complete")) {
     StageSkipped -progressStage $progressStage
 }
 Set-Location $ScriptLocation
+Write-Host "Logging stopped at $endTime"
 Stop-Transcript -ErrorAction SilentlyContinue
