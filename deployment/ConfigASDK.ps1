@@ -2129,7 +2129,7 @@ $AddAppServicePreReqs = {
             -azureDirectoryTenantName $Using:azureDirectoryTenantName -tenantID $Using:tenantID -secureVMpwd $Using:secureVMpwd -ERCSip $Using:ERCSip -branch $Using:branch `
             -asdkCreds $Using:asdkCreds -cloudAdminCreds $Using:cloudAdminCreds -ScriptLocation $Using:ScriptLocation -skipAppService $Using:skipAppService `
             -sqlServerInstance $Using:sqlServerInstance -databaseName $Using:databaseName -tableName $Using:tableName `
-            -regionName $Using:regionName -externalDomainSuffix $Using:externalDomainSuffix -appServicesCertsFolder $Using:appServicesCertsFolder, -gitHubAccount $Using:gitHubAccount
+            -regionName $Using:regionName -externalDomainSuffix $Using:externalDomainSuffix -appServicesCertsFolder $Using:appServicesCertsFolder -gitHubAccount $Using:gitHubAccount
     } -Verbose -ErrorAction Stop
 }
 JobLauncher -jobName $jobName -jobToExecute $AddAppServicePreReqs -Verbose

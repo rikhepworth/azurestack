@@ -138,9 +138,11 @@ elseif (($skipAppService -eq $false) -and ($progressCheck -ne "Complete")) {
 					.\Create-AppServiceCerts.ps1 -PfxPassword $secureVMpwd -DomainName "$regionName.$externalDomainSuffix"
 				}
 				else {
-					$certs = get-childitem -Path $appServicesCertsFolder -Recurse -Filter "*.$regionName.$externalDomainSuffix.pfx"
+                    Write-Host "Searching path $appServicesCertsFolder for files matching *.$regionName.$externalDomainSuffix.pfx"
+                    $certs = get-childitem -Path $appServicesCertsFolder -Recurse -Filter "*.$regionName.$externalDomainSuffix.pfx"
 					if ((($certs.name) -match "api") -and (($certs.name) -match "_") -and (($certs.name) -match "ftp") -and (($certs.name) -match "sso")) {
-						$certs | Copy-Item -Destination $AppServicePath
+                        Write-Host "Found the following certs: `n $certs"
+                        $certs | Copy-Item -Destination $AppServicePath
 					}
 					else {
 						throw "App Services Certificate path provided but one or more certs are missing"
