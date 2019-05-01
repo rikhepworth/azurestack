@@ -210,7 +210,11 @@ param (
 
     # 
     [Parameter(Mandatory = $false)]
-    [string]$customDomainSuffix = "local.azurestack.external"
+    [string]$customDomainSuffix = "local.azurestack.external",
+
+    # Source path for cert overrides
+	[Parameter(Mandatory = $false)]
+    [string] $appServicesCertsFolder
 )
 
 try {
@@ -2334,7 +2338,7 @@ C:\ConfigASDK\ConfigASDK.ps1, you should find the Scripts folder located at C:\C
                 -downloadPath $Using:downloadPath -deploymentMode $Using:deploymentMode -authenticationType $Using:authenticationType `
                 -azureDirectoryTenantName $Using:azureDirectoryTenantName -tenantID $Using:tenantID -secureVMpwd $Using:secureVMpwd -ERCSip $Using:ERCSip -branch $Using:branch `
                 -asdkCreds $Using:asdkCreds -cloudAdminCreds $Using:cloudAdminCreds -ScriptLocation $Using:ScriptLocation -skipAppService $Using:skipAppService `
-                -sqlServerInstance $Using:sqlServerInstance -databaseName $Using:databaseName -tableName $Using:tableName
+                -sqlServerInstance $Using:sqlServerInstance -databaseName $Using:databaseName -tableName $Using:tableName -appServicesCertsFolder $Using:appServicesCertsFolder
         } -Verbose -ErrorAction Stop
     }
     JobLauncher -jobName $jobName -jobToExecute $AddAppServicePreReqs -Verbose

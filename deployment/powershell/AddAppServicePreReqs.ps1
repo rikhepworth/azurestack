@@ -50,7 +50,11 @@ param (
     [String] $databaseName,
 
     [Parameter(Mandatory = $true)]
-    [String] $tableName
+    [String] $tableName,
+
+    # Source path for cert overrides
+	[Parameter(Mandatory = $false)]
+    [string] $appServicesCertsFolder
 )
 
 $Global:VerbosePreference = "Continue"
@@ -139,7 +143,20 @@ elseif (($skipAppService -eq $false) -and ($progressCheck -ne "Complete")) {
             Set-Location "$AppServicePath"
             
             if (!$([System.IO.File]::Exists("$AppServicePath\CertsCreated.txt"))) {
-                .\Create-AppServiceCerts.ps1 -PfxPassword $secureVMpwd -DomainName $customDomainSuffix
+                if ([string]::IsNullOrEmpty($appServicesCertsFolder)) {
+                    .\Create-AppServiceCerts.ps1 -PfxPassword $secureVMpwd -DomainName $customDomainSuffix
+                }
+                else {
+                    Write-Host "Searching path $appServicesCertsFolder for files matching *.$customDomainSuffix.pfx"
+                    $certs = get-childitem -Path $appServicesCertsFolder -Recurse -Filter "*.$customDomainSuffix.pfx"
+					if ((($certs.name) -match "api") -and (($certs.name) -match "_") -and (($certs.name) -match "ftp") -and (($certs.name) -match "sso")) {
+                        Write-Host "Found the following certs: `n $certs"
+						$certs | Copy-Item -Destination $AppServicePath
+					}
+					else {
+						throw "App Services Certificate path provided but one or more certs are missing"
+					}
+				}
                 .\Get-AzureStackRootCert.ps1 -PrivilegedEndpoint $ERCSip -CloudAdminCredential $cloudAdminCreds
                 New-Item -Path "$AppServicePath\CertsCreated.txt" -ItemType file -Force
             }
