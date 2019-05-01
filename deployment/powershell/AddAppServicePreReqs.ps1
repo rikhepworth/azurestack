@@ -54,7 +54,11 @@ param (
 
     # Source path for cert overrides
 	[Parameter(Mandatory = $false)]
-    [string] $appServicesCertsFolder
+    [string] $appServicesCertsFolder,
+
+    # Github Account to override Matt's repo for download
+	[Parameter(Mandatory = $false)]
+    [String] $gitHubAccount = 'rikhepworth'
 )
 
 $Global:VerbosePreference = "Continue"
@@ -333,7 +337,7 @@ elseif (($skipAppService -eq $false) -and ($progressCheck -ne "Complete")) {
                 if ($deploymentMode -eq "Online") {
                     if (-not [System.IO.File]::Exists("$ASDKpath\appservice\extension\CSE.zip")) {
                         Write-Host "This is an online deployment - downloading the Custom Script Extension from GitHub"
-                        $extensionURI = "https://raw.githubusercontent.com/mattmcspirit/azurestack/$branch/deployment/appservice/extension/CSE.zip"
+                        $extensionURI = "https://raw.githubusercontent.com/$gitHubAccount/azurestack/$branch/deployment/appservice/extension/CSE.zip"
                         DownloadWithRetry -downloadURI $extensionURI -downloadLocation $extensionZipPath -retries 10
                     }
                     else {

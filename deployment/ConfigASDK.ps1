@@ -214,7 +214,11 @@ param (
 
     # Source path for cert overrides
 	[Parameter(Mandatory = $false)]
-    [string] $appServicesCertsFolder
+    [string] $appServicesCertsFolder,
+
+    # Github Account to override Matt's repo for download
+	[Parameter(Mandatory = $false)]
+    [String] $gitHubAccount = 'rikhepworth'
 )
 
 try {
@@ -721,7 +725,7 @@ try {
     # Validate Github branch exists - usually reserved for testing purposes
     if ($deploymentMode -eq "Online") {
         try {
-            $urlToTest = "https://raw.githubusercontent.com/mattmcspirit/azurestack/$branch/README.md"
+            $urlToTest = "https://raw.githubusercontent.com/$gitHubAccount/azurestack/$branch/README.md"
             [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
             $statusCode = Invoke-WebRequest "$urlToTest" -UseBasicParsing -ErrorAction SilentlyContinue | ForEach-Object {$_.StatusCode} -ErrorAction SilentlyContinue
             if ($statusCode -eq 200) {
@@ -1506,7 +1510,7 @@ try {
             if ($deploymentMode -eq "Online") {
                 # If this is an online deployment, pull down the PowerShell scripts from GitHub
                 foreach ($script in $scriptArray) {
-                    $scriptBaseURI = "https://raw.githubusercontent.com/mattmcspirit/azurestack/$branch/deployment/powershell"
+                    $scriptBaseURI = "https://raw.githubusercontent.com/$gitHubAccount/azurestack/$branch/deployment/powershell"
                     $scriptDownloadPath = "$scriptPath\$script"
                     DownloadWithRetry -downloadURI "$scriptBaseURI/$script" -downloadLocation $scriptDownloadPath -retries 10
                 }
@@ -2058,12 +2062,12 @@ C:\ConfigASDK\ConfigASDK.ps1, you should find the Scripts folder located at C:\C
     $jobName = "AddUbuntuImage"
     $AddUbuntuImage = {
         Start-Job -Name AddUbuntuImage -InitializationScript $export_functions -ArgumentList $ISOpath, $ISOPath2019, $ASDKpath, $customDomainSuffix, $registerASDK, $deploymentMode, $modulePath, `
-            $azureRegSubId, $azureRegTenantID, $tenantID, $azureRegCreds, $asdkCreds, $ScriptLocation, $branch, $sqlServerInstance, $databaseName, $tableName -ScriptBlock {
+            $azureRegSubId, $azureRegTenantID, $tenantID, $azureRegCreds, $asdkCreds, $ScriptLocation, $branch, $sqlServerInstance, $databaseName, $tableName, $gitHubAccount -ScriptBlock {
             Set-Location $Using:ScriptLocation; .\Scripts\AddImage.ps1 -ASDKpath $Using:ASDKpath `
                 -customDomainSuffix $Using:customDomainSuffix -registerASDK $Using:registerASDK -deploymentMode $Using:deploymentMode -modulePath $Using:modulePath `
                 -azureRegSubId $Using:azureRegSubId -azureRegTenantID $Using:azureRegTenantID -tenantID $Using:TenantID -azureRegCreds $Using:azureRegCreds `
                 -asdkCreds $Using:asdkCreds -ScriptLocation $Using:ScriptLocation -ISOpath $Using:ISOpath -ISOPath2019 $Using:ISOPath2019 -image "UbuntuServer" -branch $Using:branch -runMode $Using:runMode `
-                -sqlServerInstance $Using:sqlServerInstance -databaseName $Using:databaseName -tableName $Using:tableName
+                -sqlServerInstance $Using:sqlServerInstance -databaseName $Using:databaseName -tableName $Using:tableName -gitHubAccount $Using:gitHubAccount
         } -Verbose -ErrorAction Stop
     }
     JobLauncher -jobName $jobName -jobToExecute $AddUbuntuImage -Verbose
@@ -2083,11 +2087,11 @@ C:\ConfigASDK\ConfigASDK.ps1, you should find the Scripts folder located at C:\C
     $AddServerCore2016Image = {
         Start-Job -Name AddServerCore2016Image -InitializationScript $export_functions -ArgumentList $ASDKpath, $customDomainSuffix, $registerASDK, $deploymentMode, `
             $modulePath, $azureRegSubId, $azureRegTenantID, $tenantID, $azureRegCreds, $asdkCreds, $ScriptLocation, $runMode, $ISOpath, $ISOPath2019, $branch, `
-            $sqlServerInstance, $databaseName, $tableName -ScriptBlock {
+            $sqlServerInstance, $databaseName, $tableName $gitHubAccount -ScriptBlock {
             Set-Location $Using:ScriptLocation; .\Scripts\AddImage.ps1 -ASDKpath $Using:ASDKpath -customDomainSuffix $Using:customDomainSuffix -registerASDK $Using:registerASDK `
                 -deploymentMode $Using:deploymentMode -modulePath $Using:modulePath -azureRegSubId $Using:azureRegSubId -azureRegTenantID $Using:azureRegTenantID `
                 -tenantID $Using:TenantID -azureRegCreds $Using:azureRegCreds -asdkCreds $Using:asdkCreds -ScriptLocation $Using:ScriptLocation -ISOpath $Using:ISOpath -ISOPath2019 $Using:ISOPath2019 `
-                -image "ServerCore2016" -branch $Using:branch -sqlServerInstance $Using:sqlServerInstance -databaseName $Using:databaseName -tableName $Using:tableName -runMode $Using:runMode
+                -image "ServerCore2016" -branch $Using:branch -sqlServerInstance $Using:sqlServerInstance -databaseName $Using:databaseName -tableName $Using:tableName -runMode $Using:runMode -gitHubAccount $Using:gitHubAccount
         } -Verbose -ErrorAction Stop
     }
     JobLauncher -jobName $jobName -jobToExecute $AddServerCore2016Image -Verbose
@@ -2096,12 +2100,12 @@ C:\ConfigASDK\ConfigASDK.ps1, you should find the Scripts folder located at C:\C
     $AddServerFull2016Image = {
         Start-Job -Name AddServerFull2016Image -InitializationScript $export_functions -ArgumentList $ASDKpath, $customDomainSuffix, `
             $registerASDK, $deploymentMode, $modulePath, $azureRegSubId, $azureRegTenantID, $tenantID, $azureRegCreds, $asdkCreds, $ScriptLocation, `
-            $runMode, $ISOpath, $ISOPath2019, $branch, $sqlServerInstance, $databaseName, $tableName -ScriptBlock {
+            $runMode, $ISOpath, $ISOPath2019, $branch, $sqlServerInstance, $databaseName, $tableName, $gitHubAccount -ScriptBlock {
             Set-Location $Using:ScriptLocation; .\Scripts\AddImage.ps1 -ASDKpath $Using:ASDKpath `
                 -customDomainSuffix $Using:customDomainSuffix -registerASDK $Using:registerASDK -deploymentMode $Using:deploymentMode -modulePath $Using:modulePath `
                 -azureRegSubId $Using:azureRegSubId -azureRegTenantID $Using:azureRegTenantID -tenantID $Using:TenantID -azureRegCreds $Using:azureRegCreds `
                 -asdkCreds $Using:asdkCreds -ScriptLocation $Using:ScriptLocation -ISOpath $Using:ISOpath -ISOPath2019 $Using:ISOPath2019 -image "ServerFull2016" -branch $Using:branch `
-                -sqlServerInstance $Using:sqlServerInstance -databaseName $Using:databaseName -tableName $Using:tableName -runMode $Using:runMode
+                -sqlServerInstance $Using:sqlServerInstance -databaseName $Using:databaseName -tableName $Using:tableName -runMode $Using:runMode -gitHubAccount $Using:gitHubAccount
         } -Verbose -ErrorAction Stop
     }
     JobLauncher -jobName $jobName -jobToExecute $AddServerFull2016Image -Verbose
@@ -2679,7 +2683,7 @@ C:\ConfigASDK\ConfigASDK.ps1, you should find the Scripts folder located at C:\C
                         $env:Path = [System.Environment]::GetEnvironmentVariable("Path", "Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path", "User") 
                         # Set up the VM alias Endpoint for Azure CLI & Python
                         if ($deploymentMode -eq "Online") {
-                            $vmAliasEndpoint = "https://raw.githubusercontent.com/mattmcspirit/azurestack/$branch/deployment/packages/Aliases/aliases.json"
+                            $vmAliasEndpoint = "https://raw.githubusercontent.com/$gitHubAccount/azurestack/$branch/deployment/packages/Aliases/aliases.json"
                         }
                         elseif (($deploymentMode -eq "PartialOnline") -or ($deploymentMode -eq "Offline")) {
                             $item = Get-ChildItem -Path "$ASDKpath\images" -Recurse -Include ("aliases.json") -ErrorAction Stop

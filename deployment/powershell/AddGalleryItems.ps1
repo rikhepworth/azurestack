@@ -32,7 +32,11 @@ param (
     [String] $databaseName,
 
     [Parameter(Mandatory = $true)]
-    [String] $tableName
+    [String] $tableName,
+
+    # Github Account to override Matt's repo for download
+	[Parameter(Mandatory = $false)]
+    [String] $gitHubAccount = 'rikhepworth'
 )
 
 $Global:VerbosePreference = "Continue"
@@ -138,10 +142,10 @@ if (($progressCheck -eq "Incomplete") -or ($progressCheck -eq "Failed")) {
             if ($deploymentMode -eq "Online") {
                 Write-Host "Uploading $azpkgPackageName"
                 if ($azpkg -eq "MySQL") {
-                    $azpkgPackageURL = "https://github.com/mattmcspirit/azurestack/raw/$branch/deployment/packages/MySQL/ASDKConfigurator.MySQL.1.0.0.azpkg"
+                    $azpkgPackageURL = "https://github.com/$gitHubAccount/azurestack/raw/$branch/deployment/packages/MySQL/ASDKConfigurator.MySQL.1.0.0.azpkg"
                 }
                 elseif ($azpkg -eq "SQLServer") {
-                    $azpkgPackageURL = "https://github.com/mattmcspirit/azurestack/raw/$branch/deployment/packages/MSSQL/ASDKConfigurator.MSSQL.1.0.0.azpkg"
+                    $azpkgPackageURL = "https://github.com/$gitHubAccount/azurestack/raw/$branch/deployment/packages/MSSQL/ASDKConfigurator.MSSQL.1.0.0.azpkg"
                 }  
             }
             # If this isn't an online deployment, use the extracted zip file, and upload to a storage account

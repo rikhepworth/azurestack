@@ -19,7 +19,11 @@ param (
     [String] $databaseName,
 
     [Parameter(Mandatory = $true)]
-    [String] $tableName
+    [String] $tableName,
+
+    # Github Account to override Matt's repo for download
+	[Parameter(Mandatory = $false)]
+    [String] $gitHubAccount = 'rikhepworth'
 )
 
 $Global:VerbosePreference = "Continue"
@@ -88,11 +92,11 @@ elseif (($skipAppService -eq $false) -and ($progressCheck -ne "Complete")) {
                 Write-Host "Downloading App Service files"
                 [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
                 #$appServiceHelperURI = "https://aka.ms/appsvconmashelpers"
-                $appServiceHelperURI = "https://github.com/mattmcspirit/azurestack/raw/master/deployment/appservice/appservicehelper1.4.zip"
+                $appServiceHelperURI = "https://github.com/$gitHubAccount/azurestack/raw/master/deployment/appservice/appservicehelper1.4.zip"
                 $appServiceHelperDownloadLocation = "$ASDKpath\appservice\appservicehelper.zip"
                 DownloadWithRetry -downloadURI "$appServiceHelperURI" -downloadLocation "$appServiceHelperDownloadLocation" -retries 10
                 #$appServiceExeURI = "https://aka.ms/appsvconmasinstaller"
-                $appServiceExeURI = "https://github.com/mattmcspirit/azurestack/raw/master/deployment/appservice/appservice1.4.exe"
+                $appServiceExeURI = "https://github.com/$gitHubAccount/azurestack/raw/master/deployment/appservice/appservice1.4.exe"
                 $appServiceExeDownloadLocation = "$ASDKpath\appservice\appservice.exe"
                 DownloadWithRetry -downloadURI "$appServiceExeURI" -downloadLocation "$appServiceExeDownloadLocation" -retries 10
                 # Temporary download of 1.5 until silent deployment is fixed

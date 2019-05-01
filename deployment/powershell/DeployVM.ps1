@@ -53,7 +53,11 @@ param (
     [String] $tableName,
 
     [Parameter(Mandatory = $false)]
-    [String] $serialMode
+    [String] $serialMode,
+
+    # Github Account to override Matt's repo for download
+	[Parameter(Mandatory = $false)]
+    [String] $gitHubAccount = 'rikhepworth'
 )
 
 $Global:VerbosePreference = "Continue"
@@ -279,12 +283,12 @@ elseif (($skipRP -eq $false) -and ($progressCheck -ne "Complete")) {
             if ($deploymentMode -eq "Online") {
                 if ($vmType -eq "AppServiceFS") {
                     Write-Host "Downloading the template required for the File Server"
-                    $mainTemplateURI = "https://raw.githubusercontent.com/mattmcspirit/azurestack/$branch/deployment/templates/FileServer/azuredeploy.json"
+                    $mainTemplateURI = "https://raw.githubusercontent.com/$gitHubAccount/azurestack/$branch/deployment/templates/FileServer/azuredeploy.json"
                 }
                 else {
                     Write-Host "Getting the URIs for all AZPKG files for deployment of resources"
                     $mainTemplateURI = $(Get-AzsGalleryItem | Where-Object {$_.Name -like "ASDKConfigurator.$azpkg*"}).DefinitionTemplates.DeploymentTemplateFileUris.Values | Where-Object {$_ -like "*mainTemplate.json"}
-                    $scriptBaseURI = "https://raw.githubusercontent.com/mattmcspirit/azurestack/$branch/deployment/scripts/"
+                    $scriptBaseURI = "https://raw.githubusercontent.com/$gitHubAccount/azurestack/$branch/deployment/scripts/"
                 }
             }
             elseif (($deploymentMode -eq "PartialOnline") -or ($deploymentMode -eq "Offline")) {

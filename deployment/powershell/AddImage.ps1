@@ -57,7 +57,11 @@ param (
     [String] $databaseName,
 
     [Parameter(Mandatory = $true)]
-    [String] $tableName
+    [String] $tableName,
+
+    # Github Account to override Matt's repo for download
+	[Parameter(Mandatory = $false)]
+    [String] $gitHubAccount = 'rikhepworth'
 )
 
 $Global:VerbosePreference = "Continue"
@@ -591,7 +595,7 @@ elseif ((!$skip2019Images) -and ($progressCheck -ne "Complete")) {
                             # Split for Windows Server Images
                             if ($deploymentMode -eq "Online") {
                                 # Download Convert-WindowsImage.ps1
-                                $convertWindowsURI = "https://raw.githubusercontent.com/mattmcspirit/azurestack/$branch/deployment/scripts/Convert-WindowsImage.ps1"
+                                $convertWindowsURI = "https://raw.githubusercontent.com/$gitHubAccount/azurestack/$branch/deployment/scripts/Convert-WindowsImage.ps1"
                                 $convertWindowsDownloadLocation = "$ASDKpath\images\$image\Convert-Windows$($imageType)Image.ps1"
                                 $convertWindowsImageExists = [System.IO.File]::Exists("$ASDKpath\images\$image\Convert-Windows$($imageType)Image.ps1")
                                 if ($convertWindowsImageExists -eq $false) {
@@ -763,7 +767,7 @@ elseif ((!$skip2019Images) -and ($progressCheck -ne "Complete")) {
 
                 if (($registerASDK -eq $true) -and ($deploymentMode -eq "Online")) {
                     if ($image -like "*2019") {
-                        $azpkgPackageURL = "https://github.com/mattmcspirit/azurestack/raw/$branch/deployment/packages/WindowsServer/$package.azpkg"
+                        $azpkgPackageURL = "https://github.com/$gitHubAccount/azurestack/raw/$branch/deployment/packages/WindowsServer/$package.azpkg"
                     }
                     else {
                         $azpkgPackageURL = $($azpkg.azpkgPath)
@@ -772,10 +776,10 @@ elseif ((!$skip2019Images) -and ($progressCheck -ne "Complete")) {
                 }
                 elseif (($registerASDK -eq $false) -and ($deploymentMode -eq "Online")) {
                     if ($image -eq "UbuntuServer") {
-                        $azpkgPackageURL = "https://github.com/mattmcspirit/azurestack/raw/$branch/deployment/packages/Ubuntu/Canonical.UbuntuServer1604LTS-ARM.1.0.0.azpkg"
+                        $azpkgPackageURL = "https://github.com/$gitHubAccount/azurestack/raw/$branch/deployment/packages/Ubuntu/Canonical.UbuntuServer1604LTS-ARM.1.0.0.azpkg"
                     }
                     else {
-                        $azpkgPackageURL = "https://github.com/mattmcspirit/azurestack/raw/$branch/deployment/packages/WindowsServer/$package.azpkg"
+                        $azpkgPackageURL = "https://github.com/$gitHubAccount/azurestack/raw/$branch/deployment/packages/WindowsServer/$package.azpkg"
                     }
                 }
                 # If this isn't an online deployment, use the extracted zip file, and upload to a storage account
