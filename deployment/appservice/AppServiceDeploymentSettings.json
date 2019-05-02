@@ -91,7 +91,7 @@
     "SelectedManagementRoleInstances": 2,
     "SelectedPublisherRoleInstances": 2,
     "SelectedFrontEndRoleInstances": 2,
-    "SelectedWorkerInstances": 0,
+    "SelectedWorkerInstances": 1,
     "PlatformImage": {
         "Publisher": "MicrosoftWindowsServer",
         "Offer": "WindowsServer",
