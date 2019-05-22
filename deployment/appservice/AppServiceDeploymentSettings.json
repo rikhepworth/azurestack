@@ -88,9 +88,9 @@
     "SQLSysAdminLogin": "<<SQLServerUser>>",
     "SQLSysAdminPassword": "<<Password>>",
     "SelectedControllerInstances": 2,
-    "SelectedManagementRoleInstances": 1,
-    "SelectedPublisherRoleInstances": 1,
-    "SelectedFrontEndRoleInstances": 1,
+    "SelectedManagementRoleInstances": 2,
+    "SelectedPublisherRoleInstances": 2,
+    "SelectedFrontEndRoleInstances": 2,
     "SelectedWorkerInstances": 1,
     "PlatformImage": {
         "Publisher": "MicrosoftWindowsServer",
