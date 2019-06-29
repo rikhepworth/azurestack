@@ -161,14 +161,14 @@ if (($progressCheck -eq "Incomplete") -or ($progressCheck -eq "Failed")) {
                     ### Firstly, check for build 14393, and if so, download the Servicing Stack Update or other MSUs will fail to apply.
                     Write-Host "Checking build number to determine Servicing Stack Upadtes"
                     if ($buildVersion -eq "14393") {
-                        $ssuArray = @("4132216", "4465659", "4485447")
+                        $ssuArray = @("4132216", "4465659", "4485447", "4498947", "4503537")
                         #Fix for broken Feb 2019 update
                         #$ssuArray = @("4132216", "4465659")
                         $updateArray = @("4091664")
                         $ssuSearchString = 'Windows Server 2016'
                     }
                     elseif ($buildVersion -eq "17763") {
-                        $ssuArray = @("4470788")
+                        $ssuArray = @("4470788", "4493510", "4499728", "4504369")
                         $updateArray = @("4465065")
                         $ssuSearchString = 'Windows Server 2019'
                     }
