@@ -556,7 +556,9 @@ elseif ((!$skip2019Images) -and ($progressCheck -ne "Complete")) {
                                     $ubuntuBuild = $ubuntuBuild.substring(0, 14)
                                 }
                                 $ubuntuBuild = $ubuntuBuild.split('.')[2]
-                                $ubuntuURI = "https://cloud-images.ubuntu.com/releases/16.04/release-$ubuntuBuild/ubuntu-16.04-server-cloudimg-amd64-disk1.vhd.zip"
+                                #$ubuntuURI = "https://cloud-images.ubuntu.com/releases/16.04/release-$ubuntuBuild/ubuntu-16.04-server-cloudimg-amd64-disk1.vhd.zip"
+                                #Hard coded uri to one that works
+                                $ubuntuURI = "https://cloud-images.ubuntu.com/releases/16.04/release-20190628/ubuntu-16.04-server-cloudimg-amd64-disk1.vhd.zip"
                                 
                                 <# Temp removal to unify Ubuntu image
                                     if (($registerASDK -eq $true) -and ($deploymentMode -eq "Online")) {
