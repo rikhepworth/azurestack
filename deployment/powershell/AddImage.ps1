@@ -550,35 +550,49 @@ if (($progressCheck -eq "Incomplete") -or ($progressCheck -eq "Failed")) {
                             $serverVHD = Get-ChildItem -Path "$csvImagePath\Images\$image\" -Filter *disk1.vhd | Rename-Item -NewName "$blobName" -PassThru -Force -ErrorAction Stop
                         }
                         else {
-                            # No existing Ubuntu Server VHD or Zip exists that matches the name (i.e. that has previously been extracted and renamed) so a fresh one will be
-                            # downloaded, extracted and the variable $UbuntuServerVHD updated accordingly.
-                            Write-Host "Cannot find a previously extracted Ubuntu Server download or ZIP file"
-                            Write-Host "Begin download of correct Ubuntu Server ZIP to $ASDKpath"
+                                # No existing Ubuntu Server VHD or Zip exists that matches the name (i.e. that has previously been extracted and renamed) so a fresh one will be
+                                # downloaded, extracted and the variable $UbuntuServerVHD updated accordingly.
+                                Write-Host "Cannot find a previously extracted Ubuntu Server download or ZIP file"
+                                Write-Host "Begin download of correct Ubuntu Server ZIP to $ASDKpath"
 
-                            if (($registerASDK -eq $true) -and ($deploymentMode -eq "Online")) {
                                 $ubuntuBuild = $azpkg.vhdVersion
                                 if (($ubuntuBuild).Length -gt 14) {
-                                    $ubuntuBuild = $ubuntuBuild.Substring(0, $ubuntuBuild.Length - 1)
+                                    $ubuntuBuild = $ubuntuBuild.substring(0, 14)
                                 }
                                 $ubuntuBuild = $ubuntuBuild.split('.')[2]
                                 $ubuntuURI = "https://cloud-images.ubuntu.com/releases/16.04/release-$ubuntuBuild/ubuntu-16.04-server-cloudimg-amd64-disk1.vhd.zip"
-                            }
-                            elseif (($registerASDK -eq $false) -and ($deploymentMode -eq "Online")) {
+                                
+                                <# Temp removal to unify Ubuntu image
+                                    if (($registerASDK -eq $true) -and ($deploymentMode -eq "Online")) {
+                                    $ubuntuBuild = $azpkg.vhdVersion
+                                    if (($ubuntuBuild).Length -gt 14) {
+                                        $ubuntuBuild = $ubuntuBuild.substring(0, 14)
+                                    }
+                                    $ubuntuBuild = $ubuntuBuild.split('.')[2]
+                                    $ubuntuURI = "https://cloud-images.ubuntu.com/releases/16.04/release-$ubuntuBuild/ubuntu-16.04-server-cloudimg-amd64-disk1.vhd.zip"
+                                }
+                                elseif (($registerASDK -eq $false) -and ($deploymentMode -eq "Online")) {
                                     #$ubuntuURI = "https://cloud-images.ubuntu.com/releases/xenial/release/ubuntu-16.04-server-cloudimg-amd64-disk1.vhd.zip"
                                     #Hard coding to a known working Azure Stack image.
-                                    $ubuntuURI = "https://cloud-images.ubuntu.com/releases/16.04/release-20180831/ubuntu-16.04-server-cloudimg-amd64-disk1.vhd.zip"
-                            }
-                            $ubuntuDownloadLocation = "$ASDKpath\images\$image\$($azpkg.offer)$($azpkg.vhdVersion).zip"
-                            DownloadWithRetry -downloadURI "$ubuntuURI" -downloadLocation "$ubuntuDownloadLocation" -retries 10
-                            if (!([System.IO.File]::Exists("$csvImagePath\Images\$image\$($azpkg.offer)$($azpkg.vhdVersion).zip"))) {
-                                Copy-Item -Path "$ASDKpath\images\$image\$($azpkg.offer)$($azpkg.vhdVersion).zip" -Destination "$csvImagePath\Images\$image\$($azpkg.offer)$($azpkg.vhdVersion).zip" -Force -Verbose -ErrorAction Stop
-                                $UbuntuServerZIP = Get-ChildItem -Path "$csvImagePath\Images\$image\$($azpkg.offer)$($azpkg.vhdVersion).zip"
-                            }
-                            else {
-                                $UbuntuServerZIP = Get-ChildItem -Path "$csvImagePath\Images\$image\$($azpkg.offer)$($azpkg.vhdVersion).zip"
-                            }
-                            Expand-Archive -Path $UbuntuServerZIP -DestinationPath "$csvImagePath\Images\$image\" -Force -ErrorAction Stop
-                            $serverVHD = Get-ChildItem -Path "$csvImagePath\Images\$image\" -Filter *disk1.vhd | Rename-Item -NewName "$blobName" -PassThru -Force -ErrorAction Stop
+                                    $ubuntuBuild = $azpkg.vhdVersion
+                                    if (($ubuntuBuild).Length -gt 14) {
+                                        $ubuntuBuild = $ubuntuBuild.substring(0, 14)
+                                    }
+                                    $ubuntuBuild = $ubuntuBuild.split('.')[2]
+                                    $ubuntuURI = "https://cloud-images.ubuntu.com/releases/16.04/release-$ubuntuBuild/ubuntu-16.04-server-cloudimg-amd64-disk1.vhd.zip"
+                                } 
+                                    #>
+                                $ubuntuDownloadLocation = "$ASDKpath\images\$image\$($azpkg.offer)$($azpkg.vhdVersion).zip"
+                                DownloadWithRetry -downloadURI "$ubuntuURI" -downloadLocation "$ubuntuDownloadLocation" -retries 10
+                                if (!([System.IO.File]::Exists("$csvImagePath\Images\$image\$($azpkg.offer)$($azpkg.vhdVersion).zip"))) {
+                                    Copy-Item -Path "$ASDKpath\images\$image\$($azpkg.offer)$($azpkg.vhdVersion).zip" -Destination "$csvImagePath\Images\$image\$($azpkg.offer)$($azpkg.vhdVersion).zip" -Force -Verbose -ErrorAction Stop
+                                    $UbuntuServerZIP = Get-ChildItem -Path "$csvImagePath\Images\$image\$($azpkg.offer)$($azpkg.vhdVersion).zip"
+                                }
+                                else {
+                                    $UbuntuServerZIP = Get-ChildItem -Path "$csvImagePath\Images\$image\$($azpkg.offer)$($azpkg.vhdVersion).zip"
+                                }
+                                Expand-Archive -Path $UbuntuServerZIP -DestinationPath "$csvImagePath\Images\$image\" -Force -ErrorAction Stop
+                                $serverVHD = Get-ChildItem -Path "$csvImagePath\Images\$image\" -Filter *disk1.vhd | Rename-Item -NewName "$blobName" -PassThru -Force -ErrorAction Stop
                         }
                     }
                     elseif ($image -ne "UbuntuServer") {
