@@ -208,7 +208,7 @@ elseif (($skipAppService -eq $false) -and ($progressCheck -ne "Complete")) {
             # Pull the pre-deployment JSON file from online, or the local zip file.
             if ($deploymentMode -eq "Online") {
                 Write-Host "Downloading the AppServiceDeploymentSettings.json file from GitHub"
-                $appServiceJsonURI = "https://raw.githubusercontent.com/mattmcspirit/azurestack/$branch/deployment/appservice/AppServiceDeploymentSettings.json"
+                $appServiceJsonURI = "https://raw.githubusercontent.com/$gitHubAccount/azurestack/$branch/deployment/appservice/AppServiceDeploymentSettings.json"
                 $appServiceJsonDownloadLocation = "$AppServicePath\AppSvcPre.json"
                 DownloadWithRetry -downloadURI "$appServiceJsonURI" -downloadLocation "$appServiceJsonDownloadLocation" -retries 10
             }

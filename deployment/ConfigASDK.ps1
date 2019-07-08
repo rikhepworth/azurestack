@@ -2277,7 +2277,7 @@ C:\ConfigASDK\ConfigASDK.ps1, you should find the Scripts folder located at C:\C
     $jobName = "AddUbuntuImage"
     $AddUbuntuImage = {
         Start-Job -Name AddUbuntuImage -InitializationScript $export_functions -ArgumentList $ISOpath, $ISOPath2019, $ASDKpath, $customDomainSuffix, $registerASDK, $deploymentMode, $modulePath, `
-            $azureRegSubId, $azureRegTenantID, $tenantID, $azureRegCreds, $asdkCreds, $ScriptLocation, $branch, $sqlServerInstance, $databaseName, $tableName, $runMode -ScriptBlock {
+            $azureRegSubId, $azureRegTenantID, $tenantID, $azureRegCreds, $asdkCreds, $ScriptLocation, $branch, $sqlServerInstance, $databaseName, $tableName, $runMode, $gitHubAccount -ScriptBlock {
             Set-Location $Using:ScriptLocation; .\Scripts\AddImage.ps1 -ASDKpath $Using:ASDKpath `
                 -customDomainSuffix $Using:customDomainSuffix -registerASDK $Using:registerASDK -deploymentMode $Using:deploymentMode -modulePath $Using:modulePath `
                 -azureRegSubId $Using:azureRegSubId -azureRegTenantID $Using:azureRegTenantID -tenantID $Using:TenantID -azureRegCreds $Using:azureRegCreds `
