@@ -72,7 +72,7 @@ elseif (($skipAppService -eq $false) -and ($progressCheck -ne "Complete")) {
             }
 
             Write-Host "Clearing previous Azure/Azure Stack logins"
-            Get-AzureRmContext -ListAvailable | Where-Object {$_.Environment -like "Azure*"} | Remove-AzureRmAccount | Out-Null
+            Get-AzureRmContext -ListAvailable | Where-Object { $_.Environment -like "Azure*" } | Remove-AzureRmAccount | Out-Null
             Clear-AzureRmContext -Scope CurrentUser -Force
             Disable-AzureRMContextAutosave -Scope CurrentUser
 
@@ -91,20 +91,20 @@ elseif (($skipAppService -eq $false) -and ($progressCheck -ne "Complete")) {
                 Remove-Item "$asdkPath\appservice\" -Recurse -Force -Confirm:$false -ErrorAction SilentlyContinue
                 Write-Host "Downloading App Service files"
                 [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
-                #$appServiceHelperURI = "https://aka.ms/appsvconmashelpers"
-                $appServiceHelperURI = "https://github.com/$gitHubAccount/azurestack/raw/master/deployment/appservice/appservicehelper1.4.zip"
+                $appServiceHelperURI = "https://aka.ms/appsvconmashelpers"
+                #$appServiceHelperURI = "https://github.com/mattmcspirit/azurestack/raw/master/deployment/appservice/appservicehelper1.4.zip"
                 $appServiceHelperDownloadLocation = "$ASDKpath\appservice\appservicehelper.zip"
                 DownloadWithRetry -downloadURI "$appServiceHelperURI" -downloadLocation "$appServiceHelperDownloadLocation" -retries 10
-                #$appServiceExeURI = "https://aka.ms/appsvconmasinstaller"
-                $appServiceExeURI = "https://github.com/$gitHubAccount/azurestack/raw/master/deployment/appservice/appservice1.4.exe"
+                $appServiceExeURI = "https://aka.ms/appsvconmasinstaller"
+                #$appServiceExeURI = "https://github.com/mattmcspirit/azurestack/raw/master/deployment/appservice/appservice1.4.exe"
                 $appServiceExeDownloadLocation = "$ASDKpath\appservice\appservice.exe"
                 DownloadWithRetry -downloadURI "$appServiceExeURI" -downloadLocation "$appServiceExeDownloadLocation" -retries 10
                 # Temporary download of 1.5 until silent deployment is fixed
-                Write-Host "Downloading App Service Upgrade file"
-                $appService15ExeURI = "https://aka.ms/appsvconmasinstaller"
-                $DesktopPath = [Environment]::GetFolderPath("Desktop")
-                $appService15ExeDownloadLocation = "$DesktopPath\UpgradeAppService.exe"
-                DownloadWithRetry -downloadURI "$appService15ExeURI" -downloadLocation "$appService15ExeDownloadLocation" -retries 10
+                #Write-Host "Downloading App Service Upgrade file"
+                #$appService15ExeURI = "https://aka.ms/appsvconmasinstaller"
+                #$DesktopPath = [Environment]::GetFolderPath("Desktop")
+                #$appService15ExeDownloadLocation = "$DesktopPath\UpgradeAppService.exe"
+                #DownloadWithRetry -downloadURI "$appService15ExeURI" -downloadLocation "$appService15ExeDownloadLocation" -retries 10
             }
             elseif (($deploymentMode -eq "PartialOnline") -or ($deploymentMode -eq "Offline")) {
                 if (-not [System.IO.File]::Exists("$ASDKpath\appservice\appservicehelper.zip")) {
@@ -134,5 +134,6 @@ elseif ($skipAppService -and ($progressCheck -ne "Complete")) {
     StageSkipped -progressStage $progressStage
 }
 Set-Location $ScriptLocation
+$endTime = $(Get-Date).ToString("MMdd-HHmmss")
 Write-Host "Logging stopped at $endTime"
 Stop-Transcript -ErrorAction SilentlyContinue

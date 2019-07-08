@@ -5,6 +5,29 @@ Version History
 -----------
 Here you'll find information on key changes, bug fixes and improvements made by version.
 
+### What's new in version 1906?
+* Updated to support ASDK 1.1906.0.30
+* Minor bug fixes
+* Moved backend RP resources to Tenant Space
+
+### What's new in version 1905.1?
+* Minor bug fixes and cleanup
+* Updated to support newer Ubuntu Server 16.04 image for registered and non-registered deployments
+* Updated Azure CLI Profile
+
+### What's new in version 1905?
+* Updated to support ASDK 1.1905.0.40
+
+### What's new in version 1904.2?
+* Support for App Service 1.6
+* Updated to support Azure Stack PowerShell 1.7.2 and AzureRM 2.5.0
+
+### What's new in version 1904.1?
+* Updated to support newer Ubuntu Server 16.04 image
+* Updated with latest Windows Updates and Adobe Flash Security Update downloads
+* Check for Azure Stack Admin Login with correct privilege
+* Check for hotmail/outlook/live accounts as these fail with non-interactive login
+
 ### What's new in version 1904?
 * Support for Azure Stack PowerShell 1.7.1
 * Updated to support ASDK 1.1904.0.36

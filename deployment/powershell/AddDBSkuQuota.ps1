@@ -89,7 +89,7 @@ elseif (($skipRP -eq $false) -and ($progressCheck -ne "Complete")) {
                 $progressCheck = CheckProgress -progressStage $progressStage
             }
             Write-Host "Clearing previous Azure/Azure Stack logins"
-            Get-AzureRmContext -ListAvailable | Where-Object {$_.Environment -like "Azure*"} | Remove-AzureRmAccount | Out-Null
+            Get-AzureRmContext -ListAvailable | Where-Object { $_.Environment -like "Azure*" } | Remove-AzureRmAccount | Out-Null
             Clear-AzureRmContext -Scope CurrentUser -Force
             Disable-AzureRMContextAutosave -Scope CurrentUser
 
@@ -104,7 +104,12 @@ elseif (($skipRP -eq $false) -and ($progressCheck -ne "Complete")) {
                 Start-Sleep -Seconds 20
                 $dbJobCheck = CheckProgress -progressStage "$($dbsku)RP"
                 if ($dbJobCheck -eq "Failed") {
-                    throw "The $($dbsku)RP stage of the process has failed. This should fully complete before the SKU and Quota are created. Check the $($dbsku)RP log, ensure that step is completed first, and rerun."
+                    Write-Host "The $($dbsku)RP stage of the process looks like it's failed. Checking again in 60 seconds to confirm"
+                    Start-Sleep -Seconds 60
+                    $dbJobCheck = CheckProgress -progressStage "$($dbsku)RP"
+                    if ($dbJobCheck -eq "Failed") {
+                        throw "The $($dbsku)RP stage of the process has failed. This should fully complete before the SKU and Quota are created. Check the $($dbsku)RP log, ensure that step is completed first, and rerun."
+                    }
                 }
             }
 
@@ -113,8 +118,8 @@ elseif (($skipRP -eq $false) -and ($progressCheck -ne "Complete")) {
             $ArmEndpoint = "https://adminmanagement.$customDomainSuffix"
             Add-AzureRMEnvironment -Name "AzureStackAdmin" -ArmEndpoint "$ArmEndpoint" -ErrorAction Stop
             Add-AzureRmAccount -EnvironmentName "AzureStackAdmin" -TenantId $tenantID -Credential $asdkCreds -ErrorAction Stop | Out-Null
-            $azsLocation = (Get-AzsLocation).Name
-            $sub = Get-AzureRmSubscription | Where-Object {$_.Name -eq "Default Provider Subscription"}
+            $azsLocation = (Get-AzureRmLocation).DisplayName
+            $sub = Get-AzureRmSubscription | Where-Object { $_.Name -eq "Default Provider Subscription" }
             $azureContext = Get-AzureRmSubscription -SubscriptionID $sub.SubscriptionId | Select-AzureRmSubscription
             $subID = $azureContext.Subscription.Id
             $azureEnvironment = Get-AzureRmEnvironment -Name AzureStackAdmin
@@ -154,7 +159,7 @@ elseif (($skipRP -eq $false) -and ($progressCheck -ne "Complete")) {
 
             # Build the header for authorization
             Write-Host "Building the headers"
-            $dbHeaders = @{ 'authorization' = "Bearer $($dbToken.AccessToken)"}
+            $dbHeaders = @{ 'authorization' = "Bearer $($dbToken.AccessToken)" }
 
             # Build the URIs
             Write-Host "Building the URIs"
@@ -250,5 +255,6 @@ elseif (($skipRP) -and ($progressCheck -ne "Complete")) {
     StageSkipped -progressStage $progressStage
 }
 Set-Location $ScriptLocation
+$endTime = $(Get-Date).ToString("MMdd-HHmmss")
 Write-Host "Logging stopped at $endTime"
 Stop-Transcript -ErrorAction SilentlyContinue
