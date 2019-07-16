@@ -40,6 +40,13 @@
     * Supports usage in offline/disconnected environments
 
 .VERSION
+    1906.2  Minor bug fixes and cleanup
+            Deployment of App Service FS and DB into Admin Sub
+    1906.1  Minor bug fixes and cleanup
+            App Service File Server deployment improvements
+            App Service File Server now uses Server Core 2016 image
+            Updated Ubuntu Server 16.04 Image - 16.04.20190628
+            Servicing Stack Update now dynamically gathered at runtime
     1906    Updated to support ASDK 1.1906.0.30
             Moved backend RP resources to Tenant Space
             Minor bug fixes and cleanup
@@ -492,10 +499,10 @@ try {
             elseif ($appType -eq "EXE") { $filePath = "$fileName" }
             Write-Host "Installing $appName"
             $installHostApp = Start-Process -FilePath "$filePath" -ArgumentList $arguments -Wait -PassThru -Verbose
-            if ($installHostApp.ExitCode -ne 0) {
+            if ($installHostApp.ExitCode -notin 0,1641,3010) {
                 throw "Installation of $appName returned error code: $($installHostApp.ExitCode)"
             }
-            if ($installHostApp.ExitCode -eq 0) {
+            if ($installHostApp.ExitCode -in 0,1641,3010) {
                 Write-Host "Installation of $appName completed successfully"
             }
         }
@@ -1301,7 +1308,7 @@ try {
     # Install SqlLocalDB from MSI
     $sqlLocalInstallPath = "C:\Program Files\Microsoft SQL Server\140\Tools\Binn\"
     HostAppInstaller -localInstallPath "$sqlLocalInstallPath\SqlLocalDB.exe" -appName SqlLocalDB `
-        -arguments "/i `"$sqlLocalDBpath\SqlLocalDB.msi`" /qn IACCEPTSQLLOCALDBLICENSETERMS=YES /l*v `"$sqlLocalDBpath\SqlLocalDB.log`"" `
+        -arguments "/i `"$sqlLocalDBpath\SqlLocalDB.msi`" /qn IACCEPTSQLLOCALDBLICENSETERMS=YES /norestart /l*v `"$sqlLocalDBpath\SqlLocalDB.log`"" `
         -fileName "SqlLocalDB.msi" -appType "MSI"
 
     # Add SqlLocalDB to $env:Path
@@ -1749,8 +1756,8 @@ try {
     }
 
     # Load the Storage PowerShell modules explicitly specifying the versions
-    Import-Module -Name Azure.Storage -RequiredVersion 4.5.0 -Verbose
-    Import-Module -Name AzureRM.Storage -RequiredVersion 5.0.4 -Verbose
+    #Import-Module -Name Azure.Storage -RequiredVersion 4.5.0
+    #Import-Module -Name AzureRM.Storage -RequiredVersion 5.0.4
 
     ### TEST ALL LOGINS #########################################################################################################################################
     #############################################################################################################################################################
@@ -1983,7 +1990,12 @@ try {
                 $ArmEndpoint = "https://adminmanagement.$customDomainSuffix"
                 Add-AzureRMEnvironment -Name "AzureStackAdmin" -ArmEndpoint "$ArmEndpoint" -ErrorAction Stop
                 $ADauth = (Get-AzureRmEnvironment -Name "AzureStackAdmin").ActiveDirectoryAuthority.TrimEnd('/')
-                $tenantId = (Invoke-RestMethod "$($ADauth)/$($azureDirectoryTenantName)/.well-known/openid-configuration").issuer.TrimEnd('/').Split('/')[-1]
+                if ($authenticationType.ToString() -like "AzureAD") {
+                    $tenantId = (Invoke-RestMethod "$($ADauth)/$($azureDirectoryTenantName)/.well-known/openid-configuration").issuer.TrimEnd('/').Split('/')[-1]
+                }
+                elseif ($authenticationType.ToString() -like "ADFS") {
+                    $tenantId = (invoke-restmethod -Verbose:$false "$($ADauth)/.well-known/openid-configuration").issuer.TrimEnd('/').Split('/')[-1]
+                }
                 Add-AzureRmAccount -EnvironmentName "AzureStackAdmin" -TenantId $tenantID -Subscription "Default Provider Subscription" -Credential $asdkCreds -ErrorAction Stop
                 Add-AzureRmAccount -EnvironmentName "AzureCloud" -SubscriptionId $azureRegSubId -TenantId $azureRegTenantID -Credential $azureRegCreds -ErrorAction Stop | Out-Null
                 # Register the Azure Stack resource provider in your Azure subscription
@@ -2104,7 +2116,7 @@ C:\ConfigASDK\ConfigASDK.ps1, you should find the Scripts folder located at C:\C
     $scriptStep = $progressStage.ToUpper()
     if (($progressCheck -eq "Incomplete") -or ($progressCheck -eq "Failed")) {
         try {
-            Write-Host "Creating a plan and private offer in the tenant space, for deploying RP resources such as database hosts and App Service resources."
+            Write-Host "Creating a plan and private offer in the tenant space, for deploying RP resources such as database hosts"
             # Configure a simple base plan and offer for IaaS for specific use by the admin for storing RP related resources
             Get-AzureRmContext -ListAvailable | Where-Object { $_.Environment -like "Azure*" } | Remove-AzureRmAccount | Out-Null
             Clear-AzureRmContext -Scope CurrentUser -Force
@@ -2180,7 +2192,10 @@ C:\ConfigASDK\ConfigASDK.ps1, you should find the Scripts folder located at C:\C
             $quotaIDs += (Get-AzsKeyVaultQuota @kvParams -ErrorAction Stop -Verbose).ID
 
             # Create the Plan and Private Offer
-            New-AzureRmResourceGroup -Name $RGName -Location $azsLocation
+            if (-not (Get-AzureRmResourceGroup -Name $RGName -Location $azsLocation -ErrorAction SilentlyContinue)) {
+                New-AzureRmResourceGroup -Name $RGName -Location $azsLocation -Force -Confirm:$false -ErrorAction Stop
+            }
+            
             $plan = New-AzsPlan -Name $PlanName -DisplayName $PlanName -Location $azsLocation -ResourceGroupName $RGName -QuotaIds $QuotaIDs
             New-AzsOffer -Name $OfferName -DisplayName $OfferName -State Private -BasePlanIds $plan.Id -ResourceGroupName $RGName -Location $azsLocation
 
@@ -2189,14 +2204,21 @@ C:\ConfigASDK\ConfigASDK.ps1, you should find the Scripts folder located at C:\C
             if ((!$skipMySQL) -or (!$skipMSSQL)) {
                 $Offer = Get-AzsManagedOffer | Where-Object name -eq "admin-rp-offer"
                 $subUserName = (Get-AzureRmContext).Account.Id
-                New-AzsUserSubscription -Owner $subUserName -OfferId $Offer.Id -DisplayName '*ADMIN DB HOSTS'
+                if (!(Get-AzsUserSubscription -ErrorAction SilentlyContinue | Where-Object { $_.DisplayName -like '*ADMIN DB HOSTS' } )) {
+                    Write-Host "Creating the *ADMIN DB HOSTS subscription for deployment of database resources"
+                    New-AzsUserSubscription -Owner $subUserName -OfferId $Offer.Id -DisplayName '*ADMIN DB HOSTS'
+                }
             }
 
-            if (!$skipAppService) {
+            # No longer required as App Service backend should be deployed into Default Provider Sub (even for Production)
+            <#if (!$skipAppService) {
                 $Offer = Get-AzsManagedOffer | Where-Object name -eq "admin-rp-offer"
                 $subUserName = (Get-AzureRmContext).Account.Id
-                New-AzsUserSubscription -Owner $subUserName -OfferId $Offer.Id -DisplayName '*ADMIN APPSVC BACKEND'
-            }
+                if (!(Get-AzsUserSubscription -ErrorAction SilentlyContinue | Where-Object { $_.DisplayName -like '*ADMIN APPSVC BACKEND' } )) {
+                    Write-Host "Creating the *ADMIN APPSVC BACKEND subscription for deployment of app service resources"
+                    New-AzsUserSubscription -Owner $subUserName -OfferId $Offer.Id -DisplayName '*ADMIN APPSVC BACKEND'
+                }
+            }#>
 
             # Log the user out of the "AzureStackAdmin" environment
             Get-AzureRmContext -ListAvailable | Where-Object { $_.Environment -like "Azure*" } | Remove-AzureRmAccount | Out-Null
@@ -3002,11 +3024,13 @@ C:\ConfigASDK\ConfigASDK.ps1, you should find the Scripts folder located at C:\C
         Write-Output "All other downloads have been stored here: $ASDKpath" >> $txtPath
         Write-Output "`r`nSQL & MySQL Resource Provider Information:" >> $txtPath
 
+        $ArmEndpoint = "https://adminmanagement.$customDomainSuffix"
+        Add-AzureRMEnvironment -Name "AzureStackAdmin" -ArmEndpoint "$ArmEndpoint" -ErrorAction Stop
         $ArmEndpoint = "https://management.$customDomainSuffix"
         Add-AzureRMEnvironment -Name "AzureStackUser" -ArmEndpoint "$ArmEndpoint" -ErrorAction Stop
-        Add-AzureRmAccount -EnvironmentName "AzureStackUser" -TenantId $tenantID -Credential $asdkCreds -ErrorAction Stop | Out-Null
 
         if (!$skipMySQL) {
+            Add-AzureRmAccount -EnvironmentName "AzureStackUser" -TenantId $tenantID -Credential $asdkCreds -ErrorAction Stop | Out-Null
             Write-Host "Selecting the *ADMIN DB HOSTS subscription"
             $sub = Get-AzureRmSubscription | Where-Object { $_.Name -eq '*ADMIN DB HOSTS' }
             $azureContext = Get-AzureRmSubscription -SubscriptionID $sub.SubscriptionId | Select-AzureRmSubscription
@@ -3019,6 +3043,7 @@ C:\ConfigASDK\ConfigASDK.ps1, you should find the Scripts folder located at C:\C
             Write-Output "MySQL Database Hosting VM Credentials = mysqladmin | $VMpwd" >> $txtPath
         }
         if (!$skipMSSQL) {
+            Add-AzureRmAccount -EnvironmentName "AzureStackUser" -TenantId $tenantID -Credential $asdkCreds -ErrorAction Stop | Out-Null
             Write-Host "Selecting the *ADMIN DB HOSTS subscription"
             $sub = Get-AzureRmSubscription | Where-Object { $_.Name -eq '*ADMIN DB HOSTS' }
             $azureContext = Get-AzureRmSubscription -SubscriptionID $sub.SubscriptionId | Select-AzureRmSubscription
@@ -3031,11 +3056,7 @@ C:\ConfigASDK\ConfigASDK.ps1, you should find the Scripts folder located at C:\C
             Write-Output "SQL Server Database Hosting VM Credentials = sqladmin | $VMpwd" >> $txtPath
         }
         if (!$skipAppService) {
-            Write-Host "Selecting the *ADMIN APPSVC BACKEND subscription"
-            $sub = Get-AzureRmSubscription | Where-Object { $_.Name -eq '*ADMIN APPSVC BACKEND' }
-            $azureContext = Get-AzureRmSubscription -SubscriptionID $sub.SubscriptionId | Select-AzureRmSubscription
-            $subID = $azureContext.Subscription.Id
-            Write-Host "Current subscription ID is: $subID"
+            Add-AzureRmAccount -EnvironmentName "AzureStackAdmin" -TenantId $tenantID -Credential $asdkCreds -ErrorAction Stop | Out-Null
             Write-Host "Getting File Server and SQL App Server FQDN"
             $fileServerFqdn = (Get-AzureRmPublicIpAddress -Name "fileserver_ip" -ResourceGroupName "appservice-fileshare").DnsSettings.Fqdn
             $sqlAppServerFqdn = (Get-AzureRmPublicIpAddress -Name "sqlapp_ip" -ResourceGroupName "appservice-sql").DnsSettings.Fqdn

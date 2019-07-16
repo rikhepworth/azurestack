@@ -141,9 +141,10 @@ elseif (($skipRP -eq $false) -and ($progressCheck -ne "Complete")) {
             Clear-AzureRmContext -Scope CurrentUser -Force
             Disable-AzureRMContextAutosave -Scope CurrentUser
 
-            Write-Host "Importing Azure.Storage and AzureRM.Storage modules"
+            <#Write-Host "Importing Azure.Storage and AzureRM.Storage modules"
             Import-Module -Name Azure.Storage -RequiredVersion 4.5.0
             Import-Module -Name AzureRM.Storage -RequiredVersion 5.0.4
+            #>
 
             if ($vmType -ne "AppServiceFS") {
                 $ubuntuImageJobCheck = CheckProgress -progressStage "UbuntuServerImage"
@@ -157,13 +158,13 @@ elseif (($skipRP -eq $false) -and ($progressCheck -ne "Complete")) {
                 }
             }
             elseif ($vmType -eq "AppServiceFS") {
-                $serverFull2016JobCheck = CheckProgress -progressStage "ServerFull2016Image"
-                while ($serverFull2016JobCheck -ne "Complete") {
-                    Write-Host "The ServerFull2016Image stage of the process has not yet completed. Checking again in 20 seconds"
+                $serverCore2016JobCheck = CheckProgress -progressStage "ServerCore2016Image"
+                while ($serverCore2016JobCheck -ne "Complete") {
+                    Write-Host "The ServerCore2016Image stage of the process has not yet completed. Checking again in 20 seconds"
                     Start-Sleep -Seconds 20
-                    $serverFull2016JobCheck = CheckProgress -progressStage "ServerFull2016Image"
-                    if ($serverFull2016JobCheck -eq "Failed") {
-                        throw "The ServerFull2016Image stage of the process has failed. This should fully complete before the File Server can be deployed. Check the ServerFullImage log, ensure that step is completed first, and rerun."
+                    $serverCore2016JobCheck = CheckProgress -progressStage "ServerCore2016Image"
+                    if ($serverCore2016JobCheck -eq "Failed") {
+                        throw "The ServerCore2016Image stage of the process has failed. This should fully complete before the File Server can be deployed. Check the ServerFullImage log, ensure that step is completed first, and rerun."
                     }
                 }
             }
@@ -271,29 +272,33 @@ elseif (($skipRP -eq $false) -and ($progressCheck -ne "Complete")) {
                 }
             }
 
-            ### Login to Azure Stack ###
-            Write-Host "Logging into Azure Stack into the admin space, to grab information"
             $ArmEndpoint = "https://adminmanagement.$customDomainSuffix"
             Add-AzureRMEnvironment -Name "AzureStackAdmin" -ArmEndpoint "$ArmEndpoint" -ErrorAction Stop
-            Add-AzureRmAccount -EnvironmentName "AzureStackAdmin" -TenantId $tenantID -Credential $asdkCreds -ErrorAction Stop | Out-Null
-            $azsLocation = (Get-AzureRmLocation).DisplayName
+            $ArmEndpoint = "https://management.$customDomainSuffix"
+            Add-AzureRMEnvironment -Name "AzureStackUser" -ArmEndpoint "$ArmEndpoint" -ErrorAction Stop
 
             # Dynamically retrieve the mainTemplate.json URI from the Azure Stack Gallery to determine deployment base URI
             if ($deploymentMode -eq "Online") {
                 if ($vmType -eq "AppServiceFS") {
                     Write-Host "Downloading the template required for the File Server"
                     $mainTemplateURI = "https://raw.githubusercontent.com/$gitHubAccount/azurestack/$branch/deployment/templates/FileServer/azuredeploy.json"
+                    $scriptBaseURI = "https://raw.githubusercontent.com/$gitHubAccount/azurestack/$branch/deployment/templates/FileServer/scripts/"
                 }
                 else {
                     Write-Host "Getting the URIs for all AZPKG files for deployment of resources"
+                    ### Login to Azure Stack ###
+                    Write-Host "Logging into Azure Stack into the admin space, to grab information"
+                    Add-AzureRmAccount -EnvironmentName "AzureStackAdmin" -TenantId $tenantID -Credential $asdkCreds -ErrorAction Stop | Out-Null
+                    $azsLocation = (Get-AzureRmLocation).DisplayName
                     $mainTemplateURI = $(Get-AzsGalleryItem | Where-Object { $_.Name -like "ASDKConfigurator.$azpkg*" }).DefinitionTemplates.DeploymentTemplateFileUris.Values | Where-Object { $_ -like "*mainTemplate.json" }
                     $scriptBaseURI = "https://raw.githubusercontent.com/mattmcspirit/azurestack/$branch/deployment/scripts/"
                 }
             }
             elseif (($deploymentMode -eq "PartialOnline") -or ($deploymentMode -eq "Offline")) {
+                Write-Host "Clearing previous Azure/Azure Stack logins"
+                Get-AzureRmContext -ListAvailable | Where-Object { $_.Environment -like "Azure*" } | Remove-AzureRmAccount | Out-Null
+                Clear-AzureRmContext -Scope CurrentUser -Force
                 Write-Host "Logging into Azure Stack into the user space, to grab the location of the scripts and packages"
-                $ArmEndpoint = "https://management.$customDomainSuffix"
-                Add-AzureRMEnvironment -Name "AzureStackUser" -ArmEndpoint "$ArmEndpoint" -ErrorAction Stop
                 Add-AzureRmAccount -EnvironmentName "AzureStackUser" -TenantId $tenantID -Credential $asdkCreds -ErrorAction Stop | Out-Null
                 Write-Host "Selecting the *ADMIN OFFLINE SCRIPTS subscription"
                 $sub = Get-AzureRmSubscription | Where-Object { $_.Name -eq '*ADMIN OFFLINE SCRIPTS' }
@@ -311,18 +316,21 @@ elseif (($skipRP -eq $false) -and ($progressCheck -ne "Complete")) {
                 }
                 else {
                     Write-Host "Getting the URIs for all AZPKG files for deployment of resources"
+                    Write-Host "Logging into Azure Stack into the admin space, to grab information"
+                    Add-AzureRmAccount -EnvironmentName "AzureStackAdmin" -TenantId $tenantID -Credential $asdkCreds -ErrorAction Stop | Out-Null
                     $mainTemplateURI = $(Get-AzsGalleryItem | Where-Object { $_.Name -like "ASDKConfigurator.$azpkg*" }).DefinitionTemplates.DeploymentTemplateFileUris.Values | Where-Object { $_ -like "*mainTemplate.json" }
                 }
                 $scriptBaseURI = ('{0}{1}/' -f $asdkOfflineStorageAccount.PrimaryEndpoints.Blob, $asdkOfflineContainerName) -replace "https", "http"
             }
             ### Login to Azure Stack ###
-            Write-Host "Logging into Azure Stack into the user space, to create the backend resources"
-            $ArmEndpoint = "https://management.$customDomainSuffix"
-            Add-AzureRMEnvironment -Name "AzureStackUser" -ArmEndpoint "$ArmEndpoint" -ErrorAction Stop
-            Add-AzureRmAccount -EnvironmentName "AzureStackUser" -TenantId $tenantID -Credential $asdkCreds -ErrorAction Stop | Out-Null
-            $azsLocation = (Get-AzureRmLocation).DisplayName
+            Write-Host "Clearing previous Azure/Azure Stack logins"
+            Get-AzureRmContext -ListAvailable | Where-Object { $_.Environment -like "Azure*" } | Remove-AzureRmAccount | Out-Null
+            Clear-AzureRmContext -Scope CurrentUser -Force
             
             if (($vmType -eq "SQLServer") -or ($vmType -eq "MySQL")) {
+                Write-Host "Logging into Azure Stack into the user space, to create the backend resources"
+                Add-AzureRmAccount -EnvironmentName "AzureStackUser" -TenantId $tenantID -Credential $asdkCreds -ErrorAction Stop | Out-Null
+                $azsLocation = (Get-AzureRmLocation).DisplayName
                 Write-Host "Selecting the *ADMIN DB HOSTS subscription"
                 $sub = Get-AzureRmSubscription | Where-Object { $_.Name -eq '*ADMIN DB HOSTS' }
                 $azureContext = Get-AzureRmSubscription -SubscriptionID $sub.SubscriptionId | Select-AzureRmSubscription
@@ -330,11 +338,9 @@ elseif (($skipRP -eq $false) -and ($progressCheck -ne "Complete")) {
                 Write-Host "Current subscription ID is: $subID"
             }
             elseif (($vmType -eq "AppServiceDB") -or ($vmType -eq "AppServiceFS")) {
-                Write-Host "Selecting the *ADMIN APPSVC BACKEND subscription"
-                $sub = Get-AzureRmSubscription | Where-Object { $_.Name -eq '*ADMIN APPSVC BACKEND' }
-                $azureContext = Get-AzureRmSubscription -SubscriptionID $sub.SubscriptionId | Select-AzureRmSubscription
-                $subID = $azureContext.Subscription.Id
-                Write-Host "Current subscription ID is: $subID"
+                Write-Host "Logging into Azure Stack into the admin space, to create the backend resources"
+                Add-AzureRmAccount -EnvironmentName "AzureStackAdmin" -TenantId $tenantID -Credential $asdkCreds -ErrorAction Stop | Out-Null
+                $azsLocation = (Get-AzureRmLocation).DisplayName
             }
                         
             Write-Host "Creating a dedicated Resource Group for all $vmType hosting assets"
@@ -451,31 +457,20 @@ elseif (($skipRP -eq $false) -and ($progressCheck -ne "Complete")) {
                     if (-not (Get-AzureRmResourceGroup -Name $rg -Location $azsLocation -ErrorAction SilentlyContinue)) {
                         New-AzureRmResourceGroup -Name $rg -Location $azsLocation -Force -Confirm:$false -ErrorAction Stop
                     }
-                    if ($deploymentMode -eq "Online") {
-                        New-AzureRmResourceGroupDeployment -Name "DeployAppServiceFileServer" -ResourceGroupName $rg -vmName "fileserver" -TemplateUri $mainTemplateURI `
-                            -adminPassword $secureVMpwd -fileShareOwnerPassword $secureVMpwd -fileShareUserPassword $secureVMpwd -Mode Incremental -Verbose -ErrorAction Stop
-                    }
-                    elseif ($deploymentMode -ne "Online") {
-                        New-AzureRmResourceGroupDeployment -Name "DeployAppServiceFileServer" -ResourceGroupName $rg -vmName "fileserver" -TemplateUri $mainTemplateURI `
-                            -adminPassword $secureVMpwd -fileShareOwnerPassword $secureVMpwd -fileShareUserPassword $secureVMpwd `
-                            -vmExtensionScriptLocation $scriptBaseURI -Mode Incremental -Verbose -ErrorAction Stop
-                    }
+                    New-AzureRmResourceGroupDeployment -Name "DeployAppServiceFileServer" -ResourceGroupName $rg -vmName "fileserver" -TemplateUri $mainTemplateURI `
+                        -adminPassword $secureVMpwd -fileShareOwnerPassword $secureVMpwd -fileShareUserPassword $secureVMpwd `
+                        -vmExtensionScriptLocation $scriptBaseURI -Mode Incremental -Verbose -ErrorAction Stop
                 }
                 elseif (!(Get-AzureRmResourceGroupDeployment -ResourceGroupName $rg -Name "DeployAppServiceFileServer" -ErrorAction SilentlyContinue)) {
                     Write-Host "No previous deployment found - starting deployment of File Server"
-                    Write-Host "Creating a dedicated Resource Group for all assets"
+                    Write-Host "Creating a dedicated Resource Group for all File Server assets"
                     if (-not (Get-AzureRmResourceGroup -Name $rg -Location $azsLocation -ErrorAction SilentlyContinue)) {
                         New-AzureRmResourceGroup -Name $rg -Location $azsLocation -Force -Confirm:$false -ErrorAction Stop
                     }
-                    if ($deploymentMode -eq "Online") {
-                        New-AzureRmResourceGroupDeployment -Name "DeployAppServiceFileServer" -ResourceGroupName $rg -vmName "fileserver" -TemplateUri $mainTemplateURI `
-                            -adminPassword $secureVMpwd -fileShareOwnerPassword $secureVMpwd -fileShareUserPassword $secureVMpwd -Mode Incremental -Verbose -ErrorAction Stop
-                    }
-                    elseif ($deploymentMode -ne "Online") {
-                        New-AzureRmResourceGroupDeployment -Name "DeployAppServiceFileServer" -ResourceGroupName $rg -vmName "fileserver" -TemplateUri $mainTemplateURI `
-                            -adminPassword $secureVMpwd -fileShareOwnerPassword $secureVMpwd -fileShareUserPassword $secureVMpwd `
-                            -vmExtensionScriptLocation $scriptBaseURI -Mode Incremental -Verbose -ErrorAction Stop
-                    }
+                    Write-Host "Starting deployment of the File Server for App Service"
+                    New-AzureRmResourceGroupDeployment -Name "DeployAppServiceFileServer" -ResourceGroupName $rg -vmName "fileserver" -TemplateUri $mainTemplateURI `
+                        -adminPassword $secureVMpwd -fileShareOwnerPassword $secureVMpwd -fileShareUserPassword $secureVMpwd `
+                        -vmExtensionScriptLocation $scriptBaseURI -Mode Incremental -Verbose -ErrorAction Stop
                 }
             }
             elseif ($vmType -eq "AppServiceDB") {
