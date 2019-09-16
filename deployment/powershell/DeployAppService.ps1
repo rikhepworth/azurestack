@@ -53,7 +53,12 @@ param (
     [String] $certPath,
 
     [Parameter(Mandatory = $true)]
-    [String] $certPwd
+    [String] $certPwd,
+
+    # Github Account to override Matt's repo for download
+	[Parameter(Mandatory = $false)]
+    [String] $gitHubAccount = 'rikhepworth'
+
 )
 
 #Global:VerbosePreference = "Continue"

@@ -56,7 +56,11 @@ param (
     [String] $serialMode,
 
     [Parameter(Mandatory = $false)]
-    [String] $multiNode
+    [String] $multiNode,
+    
+    # Github Account to override Matt's repo for download
+	[Parameter(Mandatory = $false)]
+	[String] $gitHubAccount = 'rikhepworth'
 
 )
 
@@ -306,7 +310,7 @@ elseif (($skipRP -eq $false) -and ($progressCheck -ne "Complete")) {
                     $azureContext = Get-AzureRmSubscription -SubscriptionID $sub.SubscriptionId | Select-AzureRmSubscription
                     $azsLocation = (Get-AzureRmLocation).DisplayName
                     $mainTemplateURI = $(Get-AzsGalleryItem | Where-Object { $_.Name -like "AzureStackPOC.$azpkg*" }).DefinitionTemplates.DeploymentTemplateFileUris.Values | Where-Object { $_ -like "*mainTemplate.json" }
-                    $scriptBaseURI = "https://raw.githubusercontent.com/mattmcspirit/azurestack/$branch/deployment/scripts/"
+                    $scriptBaseURI = "https://raw.githubusercontent.com/$gitHubAccount/azurestack/$branch/deployment/scripts/"
                 }
             }
             elseif (($deploymentMode -eq "PartialOnline") -or ($deploymentMode -eq "Offline")) {

@@ -59,7 +59,12 @@ param (
     [securestring] $secureCertPwd,
 
     [parameter(Mandatory = $false)]
-    [String] $multiNode
+    [String] $multiNode,
+
+    # Github Account to override Matt's repo for download
+	[Parameter(Mandatory = $false)]
+    [String] $gitHubAccount = 'rikhepworth'
+
 )
 
 $Global:VerbosePreference = "Continue"
@@ -150,8 +155,21 @@ elseif (($skipAppService -eq $false) -and ($progressCheck -ne "Complete")) {
 
             if ($multiNode -eq $false) {
                 if (!$([System.IO.File]::Exists("$AppServicePath\CertsCreated.txt"))) {
-                    Write-Host "Starting with the ASDK specific certs"
-                    .\Create-AppServiceCerts.ps1 -PfxPassword $secureVMpwd -DomainName $customDomainSuffix
+                    if ([string]::IsNullOrEmpty($certPath)) {
+                        Write-Host "Starting with the ASDK specific certs"
+                        .\Create-AppServiceCerts.ps1 -PfxPassword $secureVMpwd -DomainName $customDomainSuffix
+                    }
+                    else {
+                        Write-Host "Searching path $certPath for files matching *.$customDomainSuffix.pfx"
+                        $certs = get-childitem -Path $certPath -Recurse -Filter "*.$customDomainSuffix.pfx"
+                        if ((($certs.name) -match "api") -and (($certs.name) -match "_") -and (($certs.name) -match "ftp") -and (($certs.name) -match "sso")) {
+                            Write-Host "Found the following certs: `n $certs"
+                            $certs | Copy-Item -Destination $AppServicePath
+                        }
+                        else {
+                            throw "App Services Certificate path provided but one or more certs are missing"
+                        }
+                    }
                     .\Get-AzureStackRootCert.ps1 -PrivilegedEndpoint $ERCSip -CloudAdminCredential $pepAdminCreds
                     New-Item -Path "$AppServicePath\CertsCreated.txt" -ItemType file -Force
                 }
