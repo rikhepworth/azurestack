@@ -1,7 +1,7 @@
 ﻿[CmdletBinding()]
 param (
     [Parameter(Mandatory = $true)]
-    [String] $ASDKpath,
+    [String] $azsPath,
 
     [Parameter(Mandatory = $true)]
     [String] $deploymentMode,
@@ -20,7 +20,7 @@ param (
     [securestring] $secureVMpwd,
 
     [parameter(Mandatory = $true)]
-    [pscredential] $asdkCreds,
+    [pscredential] $azsCreds,
     
     [parameter(Mandatory = $true)]
     [String] $ScriptLocation,
@@ -87,20 +87,20 @@ $progressStage = $progressName
 $progressCheck = CheckProgress -progressStage $progressStage
 
 if ($progressCheck -eq "Complete") {
-    Write-Host "ASDK Configurator Stage: $progressStage previously completed successfully"
+    Write-Host "Azure Stack POC Configurator Stage: $progressStage previously completed successfully"
 }
 elseif (($skipRP -eq $false) -and ($progressCheck -ne "Complete")) {
     # We first need to check if in a previous run, this section was skipped, but now, the user wants to add this, so we need to reset the progress.
     if ($progressCheck -eq "Skipped") {
-        Write-Host "Operator previously skipped this step, but now wants to perform this step. Updating ConfigASDK database to Incomplete."
-        # Update the ConfigASDK database back to incomplete
+        Write-Host "Operator previously skipped this step, but now wants to perform this step. Updating AzSPoC database to Incomplete."
+        # Update the AzSPoC database back to incomplete
         StageReset -progressStage $progressStage
         $progressCheck = CheckProgress -progressStage $progressStage
     }
     if (($progressCheck -eq "Incomplete") -or ($progressCheck -eq "Failed")) {
         try {
             if ($progressCheck -eq "Failed") {
-                # Update the ConfigASDK database back to incomplete status if previously failed
+                # Update the AzSPoC database back to incomplete status if previously failed
                 StageReset -progressStage $progressStage
                 $progressCheck = CheckProgress -progressStage $progressStage
             }
@@ -138,11 +138,15 @@ elseif (($skipRP -eq $false) -and ($progressCheck -ne "Complete")) {
             Write-Host "Logging into Azure Stack into the user space to get the FQDN of the Hosting Server"
             $ArmEndpoint = "https://management.$customDomainSuffix"
             Add-AzureRMEnvironment -Name "AzureStackUser" -ArmEndpoint "$ArmEndpoint" -ErrorAction Stop
-            Add-AzureRmAccount -EnvironmentName "AzureStackUser" -TenantId $tenantID -Credential $asdkCreds -ErrorAction Stop | Out-Null
+            $ArmEndpoint = "https://adminmanagement.$customDomainSuffix"
+            Add-AzureRMEnvironment -Name "AzureStackAdmin" -ArmEndpoint "$ArmEndpoint" -ErrorAction Stop
+            Add-AzureRmAccount -EnvironmentName "AzureStackUser" -TenantId $tenantID -Credential $azsCreds -ErrorAction Stop | Out-Null
             Write-Host "Selecting the *ADMIN DB HOSTS subscription"
             $sub = Get-AzureRmSubscription | Where-Object { $_.Name -eq '*ADMIN DB HOSTS' }
-            $azureContext = Get-AzureRmSubscription -SubscriptionID $sub.SubscriptionId | Select-AzureRmSubscription
-            $subID = $azureContext.Subscription.Id
+            Set-AzureRMContext -Subscription $sub.SubscriptionId -NAME $sub.Name -Force | Out-Null
+            $subID = $sub.SubscriptionId
+            #$azureContext = Get-AzureRmSubscription -SubscriptionID $sub.SubscriptionId | Select-AzureRmSubscription
+            #$subID = $azureContext.Subscription.Id
             Write-Host "Current subscription ID is: $subID"
             
             Write-Host "Setting up Database Variables"
@@ -175,9 +179,9 @@ elseif (($skipRP -eq $false) -and ($progressCheck -ne "Complete")) {
             Clear-AzureRmContext -Scope CurrentUser -Force
 
             Write-Host "Logging into Azure Stack into the admin space to complete the process"
-            $ArmEndpoint = "https://adminmanagement.$customDomainSuffix"
-            Add-AzureRMEnvironment -Name "AzureStackAdmin" -ArmEndpoint "$ArmEndpoint" -ErrorAction Stop
-            Add-AzureRmAccount -EnvironmentName "AzureStackAdmin" -TenantId $tenantID -Credential $asdkCreds -ErrorAction Stop | Out-Null
+            Add-AzureRmAccount -EnvironmentName "AzureStackAdmin" -TenantId $tenantID -Credential $azsCreds -ErrorAction Stop | Out-Null
+            $sub = Get-AzureRmSubscription | Where-Object { $_.Name -eq "Default Provider Subscription" }
+            $azureContext = Get-AzureRmSubscription -SubscriptionID $sub.SubscriptionId | Select-AzureRmSubscription
             $azsLocation = (Get-AzureRmLocation).DisplayName
             $adminDbRg = "azurestack-admindbhosting"
 
@@ -192,19 +196,19 @@ elseif (($skipRP -eq $false) -and ($progressCheck -ne "Complete")) {
                 $templateURI = "https://raw.githubusercontent.com/$gitHubAccount/azurestack/$branch/deployment/templates/$hostingPath/azuredeploy.json"
             }
             elseif (($deploymentMode -eq "PartialOnline") -or ($deploymentMode -eq "Offline")) {
-                $templateURI = Get-ChildItem -Path "$ASDKpath\templates" -Recurse -Include "$hostingTemplate" | ForEach-Object { $_.FullName }
+                $templateURI = Get-ChildItem -Path "$azsPath\templates" -Recurse -Include "$hostingTemplate" | ForEach-Object { $_.FullName }
             }
             if ($dbHost -eq "MySQL") {
                 New-AzureRmResourceGroupDeployment -Name AddMySQLHostingServer -ResourceGroupName $adminDbRg -TemplateUri $templateURI `
                     -username "root" -password $secureVMpwd -hostingServerName $dbFqdn -totalSpaceMB 20480 `
-                    -skuName "MySQL57" -Mode Incremental -Verbose -ErrorAction Stop
+                    -skuName "MySQL80" -Mode Incremental -Verbose -ErrorAction Stop
             }
             elseif ($dbHost -eq "SQLServer") {
                 New-AzureRmResourceGroupDeployment -Name AddSQLServerHostingServer -ResourceGroupName $adminDbRg -TemplateUri $templateURI `
                     -hostingServerName $dbFqdn -hostingServerSQLLoginName "sa" -hostingServerSQLLoginPassword $secureVMpwd -totalSpaceMB 20480 `
                     -skuName "MSSQL2017" -Mode Incremental -Verbose -ErrorAction Stop
             }
-            # Update the ConfigASDK database with successful completion
+            # Update the AzSPoC database with successful completion
             $progressStage = $progressName
             StageComplete -progressStage $progressStage
         }
@@ -217,7 +221,7 @@ elseif (($skipRP -eq $false) -and ($progressCheck -ne "Complete")) {
     }
 }
 elseif (($skipRP) -and ($progressCheck -ne "Complete")) {
-    # Update the ConfigASDK database with skip status
+    # Update the AzSPoC database with skip status
     $progressStage = $progressName
     StageSkipped -progressStage $progressStage
 }
