@@ -1235,7 +1235,9 @@ try {
         [System.Security.SecureString]$securePepPwd = $secureAsdkHostPwd
         $ERCSip = "AzS-ERCS01"
         $certPwd = $VMpwd
-        $certPath = $downloadPath
+        if ([string]::IsNullOrEmpty($certPath)) {
+            $certPath = $downloadPath
+        }
         [System.Security.SecureString]$secureCertPwd = $secureVMpwd
     }
 
