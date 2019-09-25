@@ -123,7 +123,7 @@ if (!$([System.IO.Directory]::Exists("$azsPath\images\$image"))) {
 }
 
 if ($multiNode -eq $false) {
-    $imageRootPath = "C:\ClusterStorage\Volume1"
+    $imageRootPath = "C:\ClusterStorage\SU1_Volume"
 }
 else {
     $imageRootPath = $azsPath
