@@ -1,4 +1,4 @@
-Azure Stack POC Configurator 1908 - Multi-Node Guidance
+Azure Stack POC Configurator 1908.2 - Multi-Node Guidance
 Experimental Support Only - Limited Testing Performed
 ==============
 
@@ -117,7 +117,7 @@ With the script downloaded successfully, you can move on to running the script. 
 Mandatory Parameters | Explanation
 :------------ | :-------------
 **azureDirectoryTenantName** | You can use your "domain.onmicrosoft.com" tenant name, or if you are using a custom domain name in Azure AD, such as contoso.com, you can also use that.
-**downloadPath** | Ensure the folder exists, and you have enough space to hold up to 40GB of files. **This should be a path that is local to your workstation, NOT a mapped drive - known issues exist with mapped drives at this time**
+**downloadPath** | Ensure the folder exists, and you have enough space to hold at least 60-70GB of files. **This should be a path that is local to your workstation, NOT a mapped drive or USB drive - known issues exist with mapped drives/USB drives at this time**
 **ISOPath** | Should point to the Windows Server 2016 **MSDN/Visual Studio/VL** media. **Do NOT use Windows Server 2019 or any of the semi-annual releases as these are not supported by the database and App Service resource providers at this time. Evaluation media will not be supported with multinode systems**
 **VMpwd** | is the password assigned to all VMs created by the script. **Important** - App Service installation requires a strong password, at least 12 characters long, with at least 3 of the following options: 1 upper case, lower case, 1 number, 1 special character.
 **azureAdUsername** | *Service Administrator* username you used when you deployed your Azure Stack system (in Azure AD connected mode).
@@ -143,6 +143,7 @@ Optional Parameters | Explanation
 **skipMySQL** | **Do not** install the MySQL Resource Provider, Hosting Server and SKU/Quotas.
 **skipMSSQL** | **Do not** install the Microsoft SQL Server Resource Provider, Hosting Server and SKU/Quotas.
 **skipAppService** | **Do not** install the App Service pre-requisites and App Service Resource Provider.
+**azureEnvironment** | If you wish to authenticate/register to an alternative cloud, such as AzureUSGovernment, AzureGermanCloud etc, use **-azureEnvironment** and the name of the cloud. This name can be retrieved using Get-AzureRmEnvironment.
 
 Usage Examples:
 -------------
@@ -227,7 +228,7 @@ These commands should remove the AzSPoC database from the local SQLLocalDB insta
 
 ### Known Issues
 * A Windows Server 2016 ISO is required.  This should be build 1607 (The RTM release) and not any of the Windows Server Semi-Annual Channel releases (1709, 1803, 1809). These have not been validated for support with the database and App Service resource providers, so don't use those builds at this time. The script will block their usage.
-* If you wish to upload Windows Server 2019 images for testing, please use the 17763 build, which is the Windows Server 2019 RTM. All ISOs should be the MSDN/Visual Studio/Volume License media and **NOT** evaluation media.
+* If you wish to upload Windows Server 2019 images for testing, please use the 17763 build, which is the Windows Server 2019 RTM. All ISOs should be the MSDN/Visual Studio/Volume License media and **NOT** evaluation media, although currently, neither the eval, VL or MSDN media can be converted offline to use Auto VM Activation, so images will expire in 180 days. If this is an issue, **Do not include a 2019 path** and instead, once deployment is complete, download the Windows Server 2019 images from the Marketplace.
 * Do not use a mapped drive for your -downloadPath on your workstation. There are known issues which are yet to be resolved. Please use a local drive.
 
 ### Troubleshooting & Improvements
