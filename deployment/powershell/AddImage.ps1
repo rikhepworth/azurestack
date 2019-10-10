@@ -65,9 +65,14 @@ param (
     [parameter(Mandatory = $false)]
     [String] $azsRegName,
     
+    [Parameter(Mandatory = $true)]
+    [ValidateSet("AzureChinaCloud", "AzureCloud", "AzureGermanCloud", "AzureUSGovernment")]
+    [String] $azureEnvironment,
+
     # Github Account to override Matt's repo for download
 	[Parameter(Mandatory = $false)]
 	[String] $gitHubAccount = 'rikhepworth'
+
 )
 
 $Global:VerbosePreference = "Continue"
@@ -123,7 +128,14 @@ if (!$([System.IO.Directory]::Exists("$azsPath\images\$image"))) {
 }
 
 if ($multiNode -eq $false) {
-    $imageRootPath = "C:\ClusterStorage\SU1_Volume"
+    if ($([System.IO.Directory]::Exists("C:\ClusterStorage\SU1_Volume"))) {
+        Write-Host "This is a Windows Server 2019 ASDK host - setting imageRootPath to C:\ClusterStorage\SU1_Volume"
+        $imageRootPath = "C:\ClusterStorage\SU1_Volume"
+    }
+    elseif ($([System.IO.Directory]::Exists("C:\ClusterStorage\Volume1"))) {
+        Write-Host "This is a Windows Server 2016 ASDK host - setting imageRootPath to C:\ClusterStorage\Volume1"
+        $imageRootPath = "C:\ClusterStorage\Volume1"
+    }
 }
 else {
     $imageRootPath = $azsPath
@@ -363,7 +375,7 @@ elseif ((!$skip2019Images) -and ($progressCheck -ne "Complete")) {
                     $date = Get-Date -Format FileDate
                     # Temporarily hard coding to newest known working version
                     #$vhdVersion = "16.04.$date"
-                    $vhdVersion = "16.04.20190628"
+                    $vhdVersion = "16.04.20190814"
                 }
                 else {
                     $vhdVersion = ""
@@ -389,8 +401,8 @@ elseif ((!$skip2019Images) -and ($progressCheck -ne "Complete")) {
                     Clear-AzureRmContext -Scope CurrentUser -Force
                     ### Login to Azure to get all the details about the syndicated marketplace offering ###
                     Import-Module "$modulePath\Syndication\AzureStack.MarketplaceSyndication.psm1"
-                    Add-AzureRmAccount -EnvironmentName "AzureCloud" -SubscriptionId $azureRegSubId -TenantId $azureRegTenantID -Credential $azureRegCreds -ErrorAction Stop | Out-Null
-                    $azureEnvironment = Get-AzureRmEnvironment -Name AzureCloud
+                    Add-AzureRmAccount -EnvironmentName $azureEnvironment -SubscriptionId $azureRegSubId -TenantId $azureRegTenantID -Credential $azureRegCreds -ErrorAction Stop | Out-Null
+                    $azureEnv = Get-AzureRmEnvironment -Name $azureEnvironment
                     Remove-Variable -Name Registration -Force -Confirm:$false -ErrorAction SilentlyContinue
                     $Registration = (Get-AzureRmResource | Where-Object { ($_.ResourceType -eq "Microsoft.AzureStack/registrations") `
                                 -and (($_.Name -like "*$azsRegName*") -or ($_.Name -like "AzureStack*")) } | Select-Object -First 1 -ErrorAction SilentlyContinue).Name
@@ -403,7 +415,7 @@ elseif ((!$skip2019Images) -and ($progressCheck -ne "Complete")) {
                     $token = $null
                     $tokens = $null
                     $tokens = [Microsoft.Azure.Commands.Common.Authentication.AzureSession]::Instance.TokenCache.ReadItems()
-                    $token = $tokens | Where-Object Resource -EQ $azureEnvironment.ActiveDirectoryServiceEndpointResourceId | Where-Object TenantId -EQ $azureRegTenantID | Sort-Object ExpiresOn | Select-Object -Last 1 -ErrorAction Stop
+                    $token = $tokens | Where-Object Resource -EQ $azureEnv.ActiveDirectoryServiceEndpointResourceId | Where-Object TenantId -EQ $azureRegTenantID | Sort-Object ExpiresOn | Select-Object -Last 1 -ErrorAction Stop
 
                     # Define variables and create an array to store all information
                     $package = "$onlinePackage"
@@ -421,7 +433,7 @@ elseif ((!$skip2019Images) -and ($progressCheck -ne "Complete")) {
                     }
 
                     ### Get the package information ###
-                    $uri1 = "$($azureEnvironment.ResourceManagerUrl.ToString().TrimEnd('/'))/subscriptions/$($azureRegSubId.ToString())/resourceGroups/azurestack/providers/Microsoft.AzureStack/registrations/$Registration/products?api-version=2016-01-01"
+                    $uri1 = "$($azureEnv.ResourceManagerUrl.ToString().TrimEnd('/'))/subscriptions/$($azureRegSubId.ToString())/resourceGroups/azurestack/providers/Microsoft.AzureStack/registrations/$Registration/products?api-version=2016-01-01"
                     $Headers = @{ 'authorization' = "Bearer $($Token.AccessToken)" } 
                     $productList = (Invoke-RestMethod -Method GET -Uri $uri1 -Headers $Headers).value | Where-Object { $_.name -like "$package" } | Sort-Object -Property @{Expression = { $_.properties.offerVersion }; Ascending = $false } -ErrorAction Stop
                     foreach ($product in $productList) {
@@ -439,13 +451,13 @@ elseif ((!$skip2019Images) -and ($progressCheck -ne "Complete")) {
                     $azpkg.offer = $product.properties.offer
 
                     # Get product info
-                    $uri2 = "$($azureEnvironment.ResourceManagerUrl.ToString().TrimEnd('/'))/subscriptions/$($azureRegSubId.ToString())/resourceGroups/azurestack/providers/Microsoft.AzureStack/registrations/$Registration/products/$($azpkg.id)?api-version=2016-01-01"
+                    $uri2 = "$($azureEnv.ResourceManagerUrl.ToString().TrimEnd('/'))/subscriptions/$($azureRegSubId.ToString())/resourceGroups/azurestack/providers/Microsoft.AzureStack/registrations/$Registration/products/$($azpkg.id)?api-version=2016-01-01"
                     $Headers = @{ 'authorization' = "Bearer $($Token.AccessToken)" } 
                     $productDetails = Invoke-RestMethod -Method GET -Uri $uri2 -Headers $Headers
                     $azpkg.name = $productDetails.properties.galleryItemIdentity
 
                     # Get download location for AZPKG file
-                    $uri3 = "$($azureEnvironment.ResourceManagerUrl.ToString().TrimEnd('/'))/subscriptions/$($azureRegSubId.ToString())/resourceGroups/azurestack/providers/Microsoft.AzureStack/registrations/$Registration/products/$($azpkg.id)/listDetails?api-version=2016-01-01"
+                    $uri3 = "$($azureEnv.ResourceManagerUrl.ToString().TrimEnd('/'))/subscriptions/$($azureRegSubId.ToString())/resourceGroups/azurestack/providers/Microsoft.AzureStack/registrations/$Registration/products/$($azpkg.id)/listDetails?api-version=2016-01-01"
                     $downloadDetails = Invoke-RestMethod -Method POST -Uri $uri3 -Headers $Headers
                     $azpkg.azpkgPath = $downloadDetails.galleryPackageBlobSasUri
                     $azpkg.osVersion = $downloadDetails.properties.osDiskImage.operatingSystem
@@ -460,7 +472,7 @@ elseif ((!$skip2019Images) -and ($progressCheck -ne "Complete")) {
                         $azpkg.vhdPath = $downloadDetails.properties.osDiskImage.sourceBlobSasUri
                         # Temporarily hard coding to newest known working Ubuntu image
                         #$azpkg.vhdVersion = $downloadDetails.properties.version
-                        $azpkg.vhdVersion = "16.04.20190628"
+                        $azpkg.vhdVersion = "16.04.20190814"
                     }
                 }
                 <#
@@ -652,9 +664,7 @@ elseif ((!$skip2019Images) -and ($progressCheck -ne "Complete")) {
                             else {
                                 $v = "2016"
                             }
-                            #if ($multiNode -eq $false) {
                             Copy-Item -Path "$azsPath\images\$v\*" -Destination "$imageRootPath\images\$image\" -Recurse -Force -Verbose -ErrorAction Stop
-                            #}
                             $target = "$imageRootPath\images\$image\SSU"
 
                             $imageCreationSuccess = $false
@@ -687,41 +697,53 @@ elseif ((!$skip2019Images) -and ($progressCheck -ne "Complete")) {
                                         Mount-WindowsImage -ImagePath "$imageRootPath\images\$image\$blobName" -Index 1 `
                                             -Path "$mountPath" -Verbose -LogPath "$imageRootPath\images\$image\$($image)Dism.log"
                                         Write-Host "Adding the Update packages"
-                                        Add-WindowsPackage -Path "$mountPath" -PackagePath "$imageRootPath\images\$image\CU" `
-                                            -Verbose -LogPath "$imageRootPath\images\$image\$($image)Dism.log"
-
-                                        Write-Host "Updating the Windows Server Edition and AVMA product key. This may take a while."
-                                        Write-Host "Getting current Windows Server edition from the image"
+                                        try {
+                                            Add-WindowsPackage -Path "$mountPath" -PackagePath "$imageRootPath\images\$image\CU" `
+                                                -Verbose -LogPath "$imageRootPath\images\$image\$($image)Dism.log" -ErrorAction SilentlyContinue
+                                        }
+                                        catch {
+                                            Write-Host "One of the packages didn't install correctly, but process can continue."
+                                        }
+                                        Write-Host "Getting current Windows Server edition from the image ahead of potential AVMA configuration"
                                         $edition = (Get-WindowsEdition -Path $mountPath).Edition
                                         # If the user has supplied eval media, this should run
                                         if ($edition -eq "ServerDatacenterEval") {
-                                            Write-Host "Your image currently has the $edition Edition. We need to update this to ServerDatacenter"
-                                            Write-Host "This image will also be updated with the Automatic VM Activation Key"
+                                            Write-Host "Your image currently has the $edition Edition. We need to first update this to ServerDatacenter"
                                             if ($image -like "*2016") {
+                                                Write-Host "This image will also be updated with the Automatic VM Activation Key"
+                                                Write-Host "Updating the Windows Server Edition and AVMA product key. This may take a while."
                                                 Write-Host "This is a $edition image, and will now be updated to the correct edition and key. Please be patient."
                                                 dism /image:$mountPath /set-edition:ServerDatacenter /ProductKey:TMJ3Y-NTRTM-FJYXT-T22BY-CWG3J /AcceptEula /LogPath:"$imageRootPath\images\$image\$($image)Dism.log"
-    
                                             }
                                             elseif ($image -like "*2019") {
-                                                Write-Host "This is a $edition image, and will now be updated to the correct edition and key. Please be patient."
-                                                dism /image:$mountPath /set-edition:ServerDatacenter /ProductKey:H3RNG-8C32Q-Q8FRX-6TDXV-WMBMW /AcceptEula /LogPath:"$imageRootPath\images\$image\$($image)Dism.log"
+                                                #Write-Host "This is a $edition image, and will now be updated to the correct edition and key. Please be patient."
+                                                #dism /image:$mountPath /set-edition:ServerDatacenter /ProductKey:H3RNG-8C32Q-Q8FRX-6TDXV-WMBMW /AcceptEula /LogPath:"$azsPath\images\$image\$($image)Dism.log"
+                                                Write-Host "Your image currently has the $edition Edition. This cannot be updated to use the Automatic VM Activation service"
+                                                Write-Host "Any VM deployed from this image will not be activated by Azure Stack, and will stop working after 180 days."
                                             }
                                         }
                                         elseif ($edition -eq "ServerDatacenterEvalCor") {
                                             Write-Host "Your image currently has the $edition Edition. This cannot be updated to a different edition"
                                             Write-Host "Any VM deployed from this image will not be activated by Azure Stack, and will stop working after 180 days."
                                         }
-                                        # If the user has supplied MSDN/VL media - this should run
+                                        # If the user has supplied MSDN/VL media - this should run but as of 9/17, doesn't seem to be working
                                         elseif (($edition -eq "ServerDatacenter") -or ($edition -eq "ServerDatacenterCor")) {
                                             Write-Host "Your image currently has the $edition Edition. This is the correct edition for automatic activation, however we will now update the product key for AVMA"
                                             if ($image -like "*2016") {
                                                 Write-Host "This is a $edition image, and will now be updated to the correct AVMA key. Please be patient."
                                                 dism /image:$mountPath /Set-ProductKey:TMJ3Y-NTRTM-FJYXT-T22BY-CWG3J /LogPath:"$imageRootPath\images\$image\$($image)Dism.log"
-    
                                             }
                                             elseif ($image -like "*2019") {
-                                                Write-Host "This is a $edition image, and will now be updated to the correct AVMA key. Please be patient."
-                                                dism /image:$mountPath /Set-ProductKey:H3RNG-8C32Q-Q8FRX-6TDXV-WMBMW /LogPath:"$imageRootPath\images\$image\$($image)Dism.log"
+                                                try {
+                                                    Write-Host "This is a $edition image, and will now be updated to the correct AVMA key. Please be patient."
+                                                    #dism /image:$mountPath /Set-ProductKey:H3RNG-8C32Q-Q8FRX-6TDXV-WMBMW /LogPath:"$imageRootPath\images\$image\$($image)Dism.log"
+                                                    Set-WindowsProductKey -Path $mountPath -ProductKey 'H3RNG-8C32Q-Q8FRX-6TDXV-WMBMW' -LogPath "$imageRootPath\images\$image\$($image)Dism.log" -Verbose -ErrorAction SilentlyContinue
+                                                }
+                                                catch {
+                                                    Write-Host "With current Windows Server 2019 builds, it appears that the key cannot be updated."
+                                                    Write-Host "$_.Exception.Message"
+                                                    Write-Host "Using MSDN/VL media doesn't seem to work any longer. You 2019 images will have a 180 day expiration, which should be fine for POC purposes."
+                                                }
                                             }
                                         }
 
