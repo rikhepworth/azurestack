@@ -169,7 +169,7 @@ if (($progressCheck -eq "Incomplete") -or ($progressCheck -eq "Failed")) {
                         }
                         # Old ssuArray accurate as of July 2019
                         #$ssuArray = @("4132216", "4465659", "4485447", "4498947", "4503537")
-                        $updateArray = @("4091664")
+                        $updateArray = @("4520724")
                         $ssuSearchString = 'Windows Server 2016'
                         $flashSearchString = 'Security Update for Adobe Flash Player for Windows Server 2016 for x64-based Systems'
                     }
