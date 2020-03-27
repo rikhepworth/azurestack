@@ -40,6 +40,9 @@
     * Supports usage in offline/disconnected environments
 
 .VERSION
+    1910.2  More DBRP Fixes
+            Updated Ubuntu 16.04 Build
+    1910.1  DBRP Fixes for Partial Offline Deployment
     1910    Updated PowerShell to 1.8.0
             Updated Ubuntu image, included support for tar.gz extraction
             Updated to support MySQL/SQL 1.1.47.0 release
@@ -839,6 +842,9 @@ try {
     }
 
     Write-CustomVerbose -Message "Selected identity provider is $authenticationType"
+    if ($authenticationType.ToString() -like "AzureAd") {
+        Write-CustomVerbose -Message "Selected AAD Tenant is $azureDirectoryTenantName"
+    }
 
     ### VALIDATE CREDS ##########################################################################################################################################
     #############################################################################################################################################################
@@ -1896,7 +1902,7 @@ try {
             if ($psRmProfle) {
                 $cleanupRequired = $true
             }
-            $psAzureModuleCheck = Get-Module -Name Azure* -ListAvailable
+            $psAzureModuleCheck = Get-Module -Name Azure* -ListAvailable | Where-Object {$_.Name -ne "AzureStackInstallerCommon"}
             $psAzsModuleCheck = Get-Module -Name Azs.* -ListAvailable
             if (($psAzureModuleCheck) -or ($psAzsModuleCheck) ) {
                 $cleanupRequired = $true
@@ -1986,6 +1992,8 @@ try {
                 #Install-Module -Name AzureRM.Storage -RequiredVersion 5.0.4 -Force -AllowClobber -Verbose
                 # Remove incompatible storage module installed by AzureRM.Storage
                 #Uninstall-Module Azure.Storage -RequiredVersion 4.6.1 -Force -Verbose
+                #Install the kbupdate module
+                Install-Module -Name kbupdate -Force -ErrorAction Stop
             }
             elseif ($deploymentMode -ne "Online") {
                 $SourceLocation = "$downloadPath\AzSFiles\PowerShell"
@@ -1996,9 +2004,15 @@ try {
                 # If this is a PartialOnline or Offline deployment, pull from the extracted zip file
                 Install-Module AzureStack -Repository $RepoName -Force -ErrorAction Stop -Verbose
                 Install-Module AzureRM -Repository $RepoName -RequiredVersion 2.5.0 -Force -ErrorAction Stop -Verbose
-                Install-Module Azure.Storage -Repository $RepoName -RequiredVersion 4.5.0 -Force -AllowClobber -ErrorAction Stop -Verbose
-                Install-Module AzureRM.Storage -Repository $RepoName -RequiredVersion 5.0.4 -Force -AllowClobber -ErrorAction Stop -Verbose
-                Uninstall-Module Azure.Storage -RequiredVersion 4.6.1 -Force -Verbose
+                <# Required for PS Session DBRP Deployment
+                if (!$([System.IO.Directory]::Exists("$Env:ProgramFiles\SqlMySqlPsh"))) {
+                    New-Item -Path "$Env:ProgramFiles\SqlMySqlPsh" -ItemType Directory -Force | Out-Null
+                }
+                Save-Module -Name AzureRM -RequiredVersion 2.3.0 -Repository $RepoName -Path "$Env:ProgramFiles\SqlMySqlPsh" -Force -ErrorAction Stop
+                #>
+                #Install-Module Azure.Storage -Repository $RepoName -RequiredVersion 4.5.0 -Force -AllowClobber -ErrorAction Stop -Verbose
+                #Install-Module AzureRM.Storage -Repository $RepoName -RequiredVersion 5.0.4 -Force -AllowClobber -ErrorAction Stop -Verbose
+                #Uninstall-Module Azure.Storage -RequiredVersion 4.6.1 -Force -Verbose
             }
             StageComplete -progressStage $progressStage
         }
@@ -2228,81 +2242,59 @@ try {
         Write-Host "This is a multinode deployment - this step will discover and organize your certificates."
         if (($progressCheck -eq "Incomplete") -or ($progressCheck -eq "Failed")) {
             try {
-                <#
-                Write-Host "Looking for your root certificate, which should be in the certificate path that you provided..."
-                $multiNodeRootCert = Get-ChildItem -Path "$certPath\*" -Recurse -Filter "*.cer" -ErrorAction Stop
-                if ($multiNodeRootCert) {
-                    Write-Host "Found a certificate at $($multiNodeRootCert.FullName)"
-                    Write-Host "Renaming the located certificate..."
-                    Rename-Item -Path $multiNodeRootCert.FullName -NewName "AzureStackCertificationAuthority.cer" -ErrorAction Stop
-                    $multiNodeRootCert = Get-ChildItem -Path "$certPath\*" -Recurse -Filter "*.cer" -ErrorAction Stop
-                    Write-Host "Root cert located at $($multiNodeRootCert.FullName)"
+                # Set up missing cert variable
+                $missingAppCert = $false
+                $missingDBCert = $false
+
+                # Check that at last one of the RPs is being installed and if so, proceed through the else statement
+                if (($skipAppService) -and ($skipMySQL) -and ($skipMSSQL)) {
+                    Write-Host "Both the App Service and Database Resource Provider installations have been skipped."
+                    Write-Host "Marking this stage as complete - no further actions"
                 }
                 else {
-                    Write-Host "Could not locate any .cer files - please ensure you have your Azure Stack root certificate in your certificate path folder, then rerun the script." -ForegroundColor Red
-                    Break
-                } #>
-                $multiNodePFXCerts = Get-ChildItem -Path "$certPath\*" -Recurse -Filter "*.pfx" -ErrorAction Stop
-                foreach ($cert in $multiNodePFXCerts) {
-                    $PFXPath = $cert.FullName
-                    Write-Host "Found a valid certificate at $PFXPath`n"
-                    $PFX = New-Object -TypeName 'System.Security.Cryptography.X509Certificates.X509Certificate2Collection' -ErrorAction Stop
-                    Write-Host "Importing certificate..."
-                    $PFX.Import($PFXPath, $certPwd, [System.Security.Cryptography.X509Certificates.X509KeyStorageFlags]::PersistKeySet)
-                    foreach ($p in $PFX) {
-                        if ($p.DnsNameList.Unicode -like '*.appservice.*') {
-                            if ($p.DnsNameList.Unicode.Count -gt 1) {
-                                Write-Host "Gathering information on the App Service certificates"
-                                foreach ($item in $p.DnsNameList.Unicode) {
-                                    if ($item -like '`*.appservice.*') {
-                                        $newCertName = (($item) -replace '\*', "_") + ".pfx"
-                                        Write-Host "This certificate will be renamed: $($p.DnsNameList.Unicode | Select-Object -First 1)"
-                                    }
-                                }
-
-                                <#if ($p.DnsNameList.Unicode -like '`*.appservice.*') {
-                                    Write-Host "Gathering information on the App Service certificates"
-                                    $newCertName = (($p.DnsNameList.Unicode | Select-Object -First 1) -replace '\*', "_") + ".pfx"
-                                    Write-Host "This certificate will be renamed: $($p.DnsNameList.Unicode | Select-Object -First 1)"
-                                }#>
+                    if (!$skipAppService) {
+                        Write-Host "You have chosen to install the App Service Resource Provider - checking for correct certificates..."
+                        Write-Host "Certificate folder should contain 4 certificates, with the following file names:"
+                        Write-Host "_.appservice.$customdomainSuffix.pfx`napi.appservice.$customdomainSuffix.pfx`nftp.appservice.$customdomainSuffix.pfx`nsso.appservice.$customdomainSuffix.pfx"
+                        Write-Host "Checking..."
+                        $appServiceCertArray = @("_.appservice.$customdomainSuffix.pfx",
+                            "api.appservice.$customdomainSuffix.pfx",
+                            "ftp.appservice.$customdomainSuffix.pfx",
+                            "sso.appservice.$customdomainSuffix.pfx")
+                        foreach ($cert in $appServiceCertArray) {
+                            $certCheck = Get-ChildItem -Path "$certPath\*" -Recurse -Filter "$cert"
+                            if ($certCheck) {
+                                Write-Host "Successfully located App Service certificate at $($certCheck.FullName)" -ForegroundColor Green
                             }
                             else {
-                                Write-Host "This certificate will be renamed: $($p.DnsNameList.Unicode)"
-                                $newCertName = ($p.DnsNameList.Unicode) + ".pfx"
+                                Write-Host "Cannot locate App Service certificate with file name: $cert" -ForegroundColor Red
+                                $missingAppCert = $true
                             }
                         }
-                        elseif ($p.DnsNameList.Unicode -like '`*.dbadapter.*') {
-                            Write-Host "Gathering information on the Database certificates"
-                            Write-Host "This certificate will be renamed: $($p.DnsNameList.Unicode)"
-                            $newCertName = (($p.DnsNameList.Unicode) -replace '\*', "_") + ".pfx"
+                    }
+                    if ((!$skipMySQL) -or (!$skipMSSQL)) {
+                        Write-Host "You have chosen to install at least one of the Database Resource Providers - checking for correct certificate..."
+                        Write-Host "Certificate folder should contain 1 certificate for the Database Resource Provider, with the following file name:"
+                        Write-Host "_.dbadapter.$customdomainSuffix.pfx"
+                        Write-Host "Checking..."
+                        $dbAdapterCheck = "_.dbadapter.$customdomainSuffix.pfx"
+                        $certCheck = Get-ChildItem -Path "$certPath\*" -Recurse -Filter "$dbAdapterCheck"
+                        if ($certCheck) {
+                            Write-Host "Successfully located Database Resource Provider certificate at $($certCheck.FullName)" -ForegroundColor Green
+                        }
+                        else {
+                            Write-Host "Cannot locate Database Resource Provider certificate with file name: $dbAdapterCheck" -ForegroundColor Red
+                            Write-Host "Please review the documentation on GitHub to ensure certificates are correct" -ForegroundColor Red
+                            $missingDBCert = $true
                         }
                     }
-                    Write-Host "Renaming certificate for simplified management..."
-                    Rename-Item -Path $PFXPath -NewName $newCertName -ErrorAction Stop
-                    Write-Host "Done. New cert name is $newCertName."
-                }
-                Write-Host "Getting updated names for certificates..."
-                # Checking for App Service Certs
-                $appServiceCerts = Get-ChildItem -Path "$certPath\*" -Recurse -Filter "*appservice*.pfx" -ErrorAction Stop
-                if (!$skipAppService -and ($appServiceCerts.Count -ge 4)) {
-                    Write-Host "`nIt appears you have the correct number of certificates for the App Service deployment:`n"
-                    $appServiceCerts.Name
-                }
-                else {
-                    Write-Host "`nIt looks as if you do not have the correct number of certificates for the App Service deployment" -ForegroundColor Red
-                    Write-Host "You should have at least 4 separate certificates - please check the documentation for details" -ForegroundColor Red
-                    Break
-                }
-                # Checking for Database RP Cert
-                $dbCerts = Get-ChildItem -Path "$certPath\*" -Recurse -Filter "*dbadapter*.pfx" -ErrorAction Stop
-                if (!$skipAppService -and ($dbCerts.Count -ge 1)) {
-                    Write-Host "`nIt appears you have the correct number of certificates for the Database RP (SQL or MySQL) deployment:`n"
-                    $dbCerts.Name
-                }
-                else {
-                    Write-Host "`nIt looks as if you do not have the correct number of certificates for the Database RP deployment" -ForegroundColor Red
-                    Write-Host "You should have at least 1 wildcard certificate - please check the documentation for details" -ForegroundColor Red
-                    Break
+                    if (($missingAppCert -eq $true) -or ($missingDBCert -eq $true)) {
+                        Write-Host "You are missing at least 1 certificate that is required for successful deployment. Please review the logs and documentation, then rerun" -ForegroundColor Red
+                        throw "Missing certificate - Exiting process"
+                    }
+                    else {
+                        Write-Host "All certficates appear to be present and correct." -ForegroundColor Green
+                    }
                 }
                 StageComplete -progressStage $progressStage
             }
@@ -2615,6 +2607,15 @@ C:\AzSPoC\AzSPoC.ps1, you should find the Scripts folder located at C:\AzSPoC\Sc
             while (!$(Get-AzsStorageQuota -Name ($storageParams.Name) -Location $azsLocation -ErrorAction SilentlyContinue -Verbose)) {
                 New-AzsStorageQuota @storageParams -ErrorAction Stop -Verbose
             }
+            #Workaround for -ErrorAction issue with 1.8.1
+            <# try {
+                Get-AzsStorageQuota -Name ($storageParams.Name) -Location $azsLocation -ErrorAction SilentlyContinue -Verbose
+            }
+            catch {
+                $error.Clear()
+                New-AzsStorageQuota @storageParams -ErrorAction Stop -Verbose
+            }
+            #>
             if ($(Get-AzsStorageQuota -Name ($storageParams.Name) -Location $azsLocation -ErrorAction Stop -Verbose)) {
                 $quotaIDs += (Get-AzsStorageQuota -Name ($storageParams.Name) -Location $azsLocation).ID
             }
@@ -2626,7 +2627,7 @@ C:\AzSPoC\AzSPoC.ps1, you should find the Scripts folder located at C:\AzSPoC\Sc
             }
             
             $plan = New-AzsPlan -Name $PlanName -DisplayName $PlanName -Location $azsLocation -ResourceGroupName $RGName -QuotaIds $QuotaIDs
-            New-AzsOffer -Name $OfferName -DisplayName $OfferName -State Private -BasePlanIds $plan.Id -ResourceGroupName $RGName -Location $azsLocation
+            New-AzsOffer -Name $OfferName -DisplayName $OfferName -State Private -BasePlanIds $plan.Id -ResourceGroupName $RGName -Location $azsLocation -Confirm:$false
 
             # Create a new subscription for that offer, for the currently logged in user
             # 1 subscription will be for the DB hosts and one will be for the App Service
@@ -3240,10 +3241,10 @@ C:\AzSPoC\AzSPoC.ps1, you should find the Scripts folder located at C:\AzSPoC\Sc
                 $quotaIDs += $appServiceQuotaId
             }
             # Create the Plan and Offer
-            New-AzureRmResourceGroup -Name $RGName -Location $azsLocation
+            New-AzureRmResourceGroup -Name $RGName -Location $azsLocation -Force -Confirm:$false
             $plan = New-AzsPlan -Name $PlanName -DisplayName $PlanName -Location $azsLocation -ResourceGroupName $RGName -QuotaIds $QuotaIDs
-            New-AzsOffer -Name $OfferName -DisplayName $OfferName -State Private -BasePlanIds $plan.Id -ResourceGroupName $RGName -Location $azsLocation
-            Set-AzsOffer -Name $OfferName -DisplayName $OfferName -State Public -BasePlanIds $plan.Id -ResourceGroupName $RGName -Location $azsLocation
+            New-AzsOffer -Name $OfferName -DisplayName $OfferName -State Private -BasePlanIds $plan.Id -ResourceGroupName $RGName -Location $azsLocation -Confirm:$false
+            Set-AzsOffer -Name $OfferName -DisplayName $OfferName -State Public -BasePlanIds $plan.Id -ResourceGroupName $RGName -Location $azsLocation -Confirm:$false
 
             # Create a new subscription for that offer, for the currently logged in user
             $Offer = Get-AzsManagedOffer | Where-Object name -eq "BaseOffer"
@@ -3314,9 +3315,12 @@ C:\AzSPoC\AzSPoC.ps1, you should find the Scripts folder located at C:\AzSPoC\Sc
                         # WinSCP
                         Write-CustomVerbose -Message "Installing WinSCP with Chocolatey"
                         choco install winscp.install
+                        #Edge Insider Beta
+                        Write-CustomVerbose -Message "Installing Edge Insider Preview"
+                        choco install microsoft-edge-insider
                         # Chrome
-                        Write-CustomVerbose -Message "Installing Chrome with Chocolatey"
-                        choco install googlechrome
+                        #Write-CustomVerbose -Message "Installing Chrome with Chocolatey"
+                        #choco install googlechrome
                         # WinDirStat
                         Write-CustomVerbose -Message "Installing WinDirStat with Chocolatey"
                         choco install windirstat
